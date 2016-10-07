@@ -1,0 +1,14 @@
+;;;; cl-wayland.asd
+
+(asdf:defsystem #:cl-wayland
+  :description "libwayland bindings for Common Lisp"
+  :author "Malcolm Still"
+  :license "Specify license here"
+  :depends-on (#:cffi)
+  :serial t
+  :components (;;(:file "package")
+               ;;(:file "cl-wayland")
+	       (:file "wayland-server-core")
+	       (:file "wayland-server-protocol")
+	       ))
+
