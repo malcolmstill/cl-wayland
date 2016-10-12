@@ -3,7 +3,7 @@
 (asdf:defsystem #:cl-wayland
   :description "libwayland bindings for Common Lisp"
   :author "Malcolm Still"
-  :license "Specify license here"
+  :license "BSD3"
   :depends-on (#:cffi)
   :serial t
   :components (;;(:file "package")
