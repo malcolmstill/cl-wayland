@@ -18,7 +18,8 @@ xdg-shell-interface
 (in-package :xdg-shell-server-protocol)
 
 (define-foreign-library xdg-shell-server
-(t (:default "./lib-xdg-shell")))
+  (:unix (:or "/usr/lib64/lib-xdg-shell.so"))
+  (t (:default "./lib-xdg-shell")))
 
 (use-foreign-library xdg-shell-server)
 

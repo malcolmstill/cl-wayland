@@ -10,5 +10,6 @@
                ;;(:file "cl-wayland")
 	       (:file "wayland-server-core")
 	       (:file "wayland-server-protocol")
+	       (:file "xdg-shell-server-protocol")
 	       ))
 
