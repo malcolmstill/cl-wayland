@@ -1,243 +1,276 @@
-(defpackage :xdg-shell-server-protocol
-(:use :common-lisp :cffi :wayland-server-core)
-(:export xdg-popup-send-popup-done
-implement-xdg-popup
-xdg-popup-implementation
-xdg-popup-interface
-xdg-surface-send-close
-xdg-surface-send-configure
-implement-xdg-surface
-xdg-surface-implementation
-xdg-surface-interface
-xdg-shell-send-ping
-implement-xdg-shell
-xdg-shell-implementation
-xdg-shell-interface
-))
+(DEFPACKAGE :XDG-SHELL-SERVER-PROTOCOL
+  (:USE :COMMON-LISP
+        :CFFI
+        :WAYLAND-UTIL
+        :WAYLAND-SERVER-CORE
+        :WAYLAND-SERVER-PROTOCOL)
+  (:EXPORT XDG-SHELL-INTERFACE
+           XDG-SHELL-IMPLEMENTATION
+           IMPLEMENT-XDG-SHELL
+           XDG-SHELL-SEND-PING
+           XDG-SURFACE-INTERFACE
+           XDG-SURFACE-IMPLEMENTATION
+           IMPLEMENT-XDG-SURFACE
+           XDG-SURFACE-SEND-CONFIGURE
+           XDG-SURFACE-SEND-CLOSE
+           XDG-POPUP-INTERFACE
+           XDG-POPUP-IMPLEMENTATION
+           IMPLEMENT-XDG-POPUP
+           XDG-POPUP-SEND-POPUP-DONE
+           XDG-SHELL-SERVER-TYPES
+           MAKE-XDG-SHELL-SERVER-INTERFACES))
 
-(in-package :xdg-shell-server-protocol)
+(IN-PACKAGE :XDG-SHELL-SERVER-PROTOCOL)
 
-(define-foreign-library xdg-shell-server
-  (:unix (:or "/usr/lib64/lib-xdg-shell.so"))
-  (t (:default "./lib-xdg-shell")))
+(DEFPARAMETER XDG-SHELL-INTERFACE NIL)
 
-(use-foreign-library xdg-shell-server)
+(DEFCSTRUCT XDG-SHELL-IMPLEMENTATION (DESTROY :POINTER)
+ (USE-UNSTABLE-VERSION :POINTER) (GET-XDG-SURFACE :POINTER)
+ (GET-XDG-POPUP :POINTER) (PONG :POINTER))
 
-;; Interface xdg_shell
-;; xdg_shell allows clients to turn a wl_surface into a "real window"
-;;       which can be dragged, resized, stacked, and moved around by the
-;;       user. Everything about this interface is suited towards traditional
-;;       desktop environments.
-(defparameter xdg-shell-interface (foreign-symbol-pointer "xdg_shell_interface"))
-(defcstruct xdg-shell-implementation
-(destroy :pointer)
-(use-unstable-version :pointer)
-(get-xdg-surface :pointer)
-(get-xdg-popup :pointer)
-(pong :pointer)
-)
+(DEFUN IMPLEMENT-XDG-SHELL
+       (
+        &KEY (DESTROY NIL) (USE-UNSTABLE-VERSION NIL) (GET-XDG-SURFACE NIL)
+        (GET-XDG-POPUP NIL) (PONG NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT XDG-SHELL-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SHELL-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SHELL-IMPLEMENTATION) 'USE-UNSTABLE-VERSION)
+            (IF USE-UNSTABLE-VERSION
+                USE-UNSTABLE-VERSION
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-USE-UNSTABLE-VERSION :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (VERSION :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SHELL-IMPLEMENTATION) 'GET-XDG-SURFACE)
+            (IF GET-XDG-SURFACE
+                GET-XDG-SURFACE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-XDG-SURFACE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (SURFACE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SHELL-IMPLEMENTATION) 'GET-XDG-POPUP)
+            (IF GET-XDG-POPUP
+                GET-XDG-POPUP
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-XDG-POPUP :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (SURFACE :POINTER) (PARENT :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32) (X :INT32) (Y :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SHELL-IMPLEMENTATION) 'PONG)
+            (IF PONG
+                PONG
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-PONG :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SERIAL :UINT32))))))
+    IMPLEMENTATION))
 
-(defun implement-xdg-shell (&key (destroy nil) (use-unstable-version nil) (get-xdg-surface nil) (get-xdg-popup nil) (pong nil) )
-(let ((implementation (foreign-alloc '(:struct xdg-shell-implementation))))
-(setf (foreign-slot-value implementation '(:struct xdg-shell-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-shell-implementation) 'use-unstable-version) (if use-unstable-version use-unstable-version(get-callback (defcallback empty-use-unstable-version :void
-((client :pointer) (resource :pointer) (version :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-shell-implementation) 'get-xdg-surface) (if get-xdg-surface get-xdg-surface(get-callback (defcallback empty-get-xdg-surface :void
-((client :pointer) (resource :pointer) (id :pointer)(surface :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-shell-implementation) 'get-xdg-popup) (if get-xdg-popup get-xdg-popup(get-callback (defcallback empty-get-xdg-popup :void
-((client :pointer) (resource :pointer) (id :pointer)(surface :pointer)(parent :pointer)(seat :pointer)(serial :uint32)(x :int32)(y :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-shell-implementation) 'pong) (if pong pong(get-callback (defcallback empty-pong :void
-((client :pointer) (resource :pointer) (serial :uint32))
-))
-))
+(DEFUN XDG-SHELL-SEND-PING (RESOURCE SERIAL)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 SERIAL))
 
-implementation))
+(DEFPARAMETER XDG-SURFACE-INTERFACE NIL)
 
-(defun xdg-shell-send-ping (resource serial)
-(wl-resource-post-event resource 0 :uint32 serial))
+(DEFCSTRUCT XDG-SURFACE-IMPLEMENTATION (DESTROY :POINTER) (SET-PARENT :POINTER)
+ (SET-TITLE :POINTER) (SET-APP-ID :POINTER) (SHOW-WINDOW-MENU :POINTER)
+ (MOVE :POINTER) (RESIZE :POINTER) (ACK-CONFIGURE :POINTER)
+ (SET-WINDOW-GEOMETRY :POINTER) (SET-MAXIMIZED :POINTER)
+ (UNSET-MAXIMIZED :POINTER) (SET-FULLSCREEN :POINTER)
+ (UNSET-FULLSCREEN :POINTER) (SET-MINIMIZED :POINTER))
 
+(DEFUN IMPLEMENT-XDG-SURFACE
+       (
+        &KEY (DESTROY NIL) (SET-PARENT NIL) (SET-TITLE NIL) (SET-APP-ID NIL)
+        (SHOW-WINDOW-MENU NIL) (MOVE NIL) (RESIZE NIL) (ACK-CONFIGURE NIL)
+        (SET-WINDOW-GEOMETRY NIL) (SET-MAXIMIZED NIL) (UNSET-MAXIMIZED NIL)
+        (SET-FULLSCREEN NIL) (UNSET-FULLSCREEN NIL) (SET-MINIMIZED NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT XDG-SURFACE-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-PARENT)
+            (IF SET-PARENT
+                SET-PARENT
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-PARENT :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (PARENT :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-TITLE)
+            (IF SET-TITLE
+                SET-TITLE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-TITLE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (TITLE :STRING))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-APP-ID)
+            (IF SET-APP-ID
+                SET-APP-ID
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-APP-ID :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (APP-ID :STRING))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SHOW-WINDOW-MENU)
+            (IF SHOW-WINDOW-MENU
+                SHOW-WINDOW-MENU
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SHOW-WINDOW-MENU :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32) (X :INT32) (Y :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'MOVE)
+            (IF MOVE
+                MOVE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-MOVE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'RESIZE)
+            (IF RESIZE
+                RESIZE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RESIZE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32) (EDGES :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'ACK-CONFIGURE)
+            (IF ACK-CONFIGURE
+                ACK-CONFIGURE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-ACK-CONFIGURE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SERIAL :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-WINDOW-GEOMETRY)
+            (IF SET-WINDOW-GEOMETRY
+                SET-WINDOW-GEOMETRY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-WINDOW-GEOMETRY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (X :INT32) (Y :INT32)
+                   (WIDTH :INT32) (HEIGHT :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-MAXIMIZED)
+            (IF SET-MAXIMIZED
+                SET-MAXIMIZED
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-MAXIMIZED :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'UNSET-MAXIMIZED)
+            (IF UNSET-MAXIMIZED
+                UNSET-MAXIMIZED
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-UNSET-MAXIMIZED :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-FULLSCREEN)
+            (IF SET-FULLSCREEN
+                SET-FULLSCREEN
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-FULLSCREEN :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (OUTPUT :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'UNSET-FULLSCREEN)
+            (IF UNSET-FULLSCREEN
+                UNSET-FULLSCREEN
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-UNSET-FULLSCREEN :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-SURFACE-IMPLEMENTATION) 'SET-MINIMIZED)
+            (IF SET-MINIMIZED
+                SET-MINIMIZED
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-MINIMIZED :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
 
-;; Interface xdg_surface
-;; An interface that may be implemented by a wl_surface, for
-;;       implementations that provide a desktop-style user interface.
-;; 
-;;       It provides requests to treat surfaces like windows, allowing to set
-;;       properties like maximized, fullscreen, minimized, and to move and resize
-;;       them, and associate metadata like title and app id.
-;; 
-;;       The client must call wl_surface.commit on the corresponding wl_surface
-;;       for the xdg_surface state to take effect. Prior to committing the new
-;;       state, it can set up initial configuration, such as maximizing or setting
-;;       a window geometry.
-;; 
-;;       Even without attaching a buffer the compositor must respond to initial
-;;       committed configuration, for instance sending a configure event with
-;;       expected window geometry if the client maximized its surface during
-;;       initialization.
-;; 
-;;       For a surface to be mapped by the compositor the client must have
-;;       committed both an xdg_surface state and a buffer.
-(defparameter xdg-surface-interface (foreign-symbol-pointer "xdg_surface_interface"))
-(defcstruct xdg-surface-implementation
-(destroy :pointer)
-(set-parent :pointer)
-(set-title :pointer)
-(set-app-id :pointer)
-(show-window-menu :pointer)
-(move :pointer)
-(resize :pointer)
-(ack-configure :pointer)
-(set-window-geometry :pointer)
-(set-maximized :pointer)
-(unset-maximized :pointer)
-(set-fullscreen :pointer)
-(unset-fullscreen :pointer)
-(set-minimized :pointer)
-)
+(DEFUN XDG-SURFACE-SEND-CONFIGURE (RESOURCE WIDTH HEIGHT STATES SERIAL)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :INT32 WIDTH :INT32 HEIGHT :POINTER STATES
+   :UINT32 SERIAL))
 
-(defun implement-xdg-surface (&key (destroy nil) (set-parent nil) (set-title nil) (set-app-id nil) (show-window-menu nil) (move nil) (resize nil) (ack-configure nil) (set-window-geometry nil) (set-maximized nil) (unset-maximized nil) (set-fullscreen nil) (unset-fullscreen nil) (set-minimized nil) )
-(let ((implementation (foreign-alloc '(:struct xdg-surface-implementation))))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-parent) (if set-parent set-parent(get-callback (defcallback empty-set-parent :void
-((client :pointer) (resource :pointer) (parent :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-title) (if set-title set-title(get-callback (defcallback empty-set-title :void
-((client :pointer) (resource :pointer) (title :string))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-app-id) (if set-app-id set-app-id(get-callback (defcallback empty-set-app-id :void
-((client :pointer) (resource :pointer) (app-id :string))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'show-window-menu) (if show-window-menu show-window-menu(get-callback (defcallback empty-show-window-menu :void
-((client :pointer) (resource :pointer) (seat :pointer)(serial :uint32)(x :int32)(y :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'move) (if move move(get-callback (defcallback empty-move :void
-((client :pointer) (resource :pointer) (seat :pointer)(serial :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'resize) (if resize resize(get-callback (defcallback empty-resize :void
-((client :pointer) (resource :pointer) (seat :pointer)(serial :uint32)(edges :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'ack-configure) (if ack-configure ack-configure(get-callback (defcallback empty-ack-configure :void
-((client :pointer) (resource :pointer) (serial :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-window-geometry) (if set-window-geometry set-window-geometry(get-callback (defcallback empty-set-window-geometry :void
-((client :pointer) (resource :pointer) (x :int32)(y :int32)(width :int32)(height :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-maximized) (if set-maximized set-maximized(get-callback (defcallback empty-set-maximized :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'unset-maximized) (if unset-maximized unset-maximized(get-callback (defcallback empty-unset-maximized :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-fullscreen) (if set-fullscreen set-fullscreen(get-callback (defcallback empty-set-fullscreen :void
-((client :pointer) (resource :pointer) (output :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'unset-fullscreen) (if unset-fullscreen unset-fullscreen(get-callback (defcallback empty-unset-fullscreen :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct xdg-surface-implementation) 'set-minimized) (if set-minimized set-minimized(get-callback (defcallback empty-set-minimized :void
-((client :pointer) (resource :pointer) )
-))
-))
+(DEFUN XDG-SURFACE-SEND-CLOSE (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 1))
 
-implementation))
+(DEFPARAMETER XDG-POPUP-INTERFACE NIL)
 
-(defun xdg-surface-send-configure (resource width height states serial)
-(wl-resource-post-event resource 0 :int32 width :int32 height :pointer states :uint32 serial))
+(DEFCSTRUCT XDG-POPUP-IMPLEMENTATION (DESTROY :POINTER))
 
-(defun xdg-surface-send-close (resource )
-(wl-resource-post-event resource 1 ))
+(DEFUN IMPLEMENT-XDG-POPUP (&KEY (DESTROY NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT XDG-POPUP-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT XDG-POPUP-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
 
+(DEFUN XDG-POPUP-SEND-POPUP-DONE (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 0))
 
-;; Interface xdg_popup
-;; A popup surface is a short-lived, temporary surface that can be
-;;       used to implement menus. It takes an explicit grab on the surface
-;;       that will be dismissed when the user dismisses the popup. This can
-;;       be done by the user clicking outside the surface, using the keyboard,
-;;       or even locking the screen through closing the lid or a timeout.
-;; 
-;;       When the popup is dismissed, a popup_done event will be sent out,
-;;       and at the same time the surface will be unmapped. The xdg_popup
-;;       object is now inert and cannot be reactivated, so clients should
-;;       destroy it. Explicitly destroying the xdg_popup object will also
-;;       dismiss the popup and unmap the surface.
-;; 
-;;       Clients will receive events for all their surfaces during this
-;;       grab (which is an "owner-events" grab in X11 parlance). This is
-;;       done so that users can navigate through submenus and other
-;;       "nested" popup windows without having to dismiss the topmost
-;;       popup.
-;; 
-;;       Clients that want to dismiss the popup when another surface of
-;;       their own is clicked should dismiss the popup using the destroy
-;;       request.
-;; 
-;;       The parent surface must have either an xdg_surface or xdg_popup
-;;       role.
-;; 
-;;       Specifying an xdg_popup for the parent means that the popups are
-;;       nested, with this popup now being the topmost popup. Nested
-;;       popups must be destroyed in the reverse order they were created
-;;       in, e.g. the only popup you are allowed to destroy at all times
-;;       is the topmost one.
-;; 
-;;       If there is an existing popup when creating a new popup, the
-;;       parent must be the current topmost popup.
-;; 
-;;       A parent surface must be mapped before the new popup is mapped.
-;; 
-;;       When compositors choose to dismiss a popup, they will likely
-;;       dismiss every nested popup as well. When a compositor dismisses
-;;       popups, it will follow the same dismissing order as required
-;;       from the client.
-;; 
-;;       The x and y arguments passed when creating the popup object specify
-;;       where the top left of the popup should be placed, relative to the
-;;       local surface coordinates of the parent surface. See
-;;       xdg_shell.get_xdg_popup.
-;; 
-;;       The client must call wl_surface.commit on the corresponding wl_surface
-;;       for the xdg_popup state to take effect.
-;; 
-;;       For a surface to be mapped by the compositor the client must have
-;;       committed both the xdg_popup state and a buffer.
-(defparameter xdg-popup-interface (foreign-symbol-pointer "xdg_popup_interface"))
-(defcstruct xdg-popup-implementation
-(destroy :pointer)
-)
+(DEFPARAMETER XDG-SHELL-SERVER-TYPES NIL)
 
-(defun implement-xdg-popup (&key (destroy nil) )
-(let ((implementation (foreign-alloc '(:struct xdg-popup-implementation))))
-(setf (foreign-slot-value implementation '(:struct xdg-popup-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun xdg-popup-send-popup-done (resource )
-(wl-resource-post-event resource 0 ))
+(DEFUN MAKE-XDG-SHELL-SERVER-INTERFACES ()
+  (SETF XDG-SHELL-INTERFACE
+          (MAKE-WL-INTERFACE "xdg_shell" 1 5 (NULL-POINTER) 1 (NULL-POINTER)))
+  (SETF XDG-SURFACE-INTERFACE
+          (MAKE-WL-INTERFACE "xdg_surface" 1 14 (NULL-POINTER) 2
+           (NULL-POINTER)))
+  (SETF XDG-POPUP-INTERFACE
+          (MAKE-WL-INTERFACE "xdg_popup" 1 1 (NULL-POINTER) 1 (NULL-POINTER)))
+  (SETF XDG-SHELL-SERVER-TYPES
+          (MAKE-WL-TYPES (NULL-POINTER) (NULL-POINTER) XDG-SURFACE-INTERFACE
+           WL-SURFACE-INTERFACE XDG-POPUP-INTERFACE WL-SURFACE-INTERFACE
+           WL-SURFACE-INTERFACE WL-SEAT-INTERFACE (NULL-POINTER) (NULL-POINTER)
+           (NULL-POINTER) (NULL-POINTER) (NULL-POINTER) XDG-SURFACE-INTERFACE
+           (NULL-POINTER) (NULL-POINTER) WL-SEAT-INTERFACE (NULL-POINTER)
+           (NULL-POINTER) (NULL-POINTER) WL-SEAT-INTERFACE (NULL-POINTER)
+           WL-SEAT-INTERFACE (NULL-POINTER) (NULL-POINTER) (NULL-POINTER)
+           (NULL-POINTER) (NULL-POINTER) (NULL-POINTER) (NULL-POINTER)
+           WL-OUTPUT-INTERFACE (NULL-POINTER) (NULL-POINTER) (NULL-POINTER)
+           (NULL-POINTER)))
+  (SET-REQUESTS XDG-SHELL-INTERFACE
+   (MAKE-WL-MESSAGE (LIST "destroy" "" XDG-SHELL-SERVER-TYPES)
+    (LIST "use_unstable_version" "i" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 1))
+    (LIST "get_xdg_surface" "no" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 2))
+    (LIST "get_xdg_popup" "nooouii" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 4))
+    (LIST "pong" "u" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 11))))
+  (SET-EVENTS XDG-SHELL-INTERFACE
+   (MAKE-WL-MESSAGE
+    (LIST "ping" "u" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 12))))
+  (SET-REQUESTS XDG-SURFACE-INTERFACE
+   (MAKE-WL-MESSAGE (LIST "destroy" "" XDG-SHELL-SERVER-TYPES)
+    (LIST "set_parent" "?o" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 13))
+    (LIST "set_title" "s" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 14))
+    (LIST "set_app_id" "s" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 15))
+    (LIST "show_window_menu" "ouii" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 16))
+    (LIST "move" "ou" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 20))
+    (LIST "resize" "ouu" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 22))
+    (LIST "ack_configure" "u" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 25))
+    (LIST "set_window_geometry" "iiii"
+          (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 26))
+    (LIST "set_maximized" "" XDG-SHELL-SERVER-TYPES)
+    (LIST "unset_maximized" "" XDG-SHELL-SERVER-TYPES)
+    (LIST "set_fullscreen" "?o" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 30))
+    (LIST "unset_fullscreen" "" XDG-SHELL-SERVER-TYPES)
+    (LIST "set_minimized" "" XDG-SHELL-SERVER-TYPES)))
+  (SET-EVENTS XDG-SURFACE-INTERFACE
+   (MAKE-WL-MESSAGE
+    (LIST "configure" "iiau" (OFFSET-TYPES XDG-SHELL-SERVER-TYPES 31))
+    (LIST "close" "" XDG-SHELL-SERVER-TYPES)))
+  (SET-REQUESTS XDG-POPUP-INTERFACE
+   (MAKE-WL-MESSAGE (LIST "destroy" "" XDG-SHELL-SERVER-TYPES)))
+  (SET-EVENTS XDG-POPUP-INTERFACE
+   (MAKE-WL-MESSAGE (LIST "popup_done" "" XDG-SHELL-SERVER-TYPES))))
 

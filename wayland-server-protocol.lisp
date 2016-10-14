@@ -1,1053 +1,1012 @@
-(defpackage :wayland-server-protocol
-(:use :common-lisp :cffi :wayland-server-core)
-(:export implement-wl-subsurface
-wl-subsurface-implementation
-wl-subsurface-interface
-implement-wl-subcompositor
-wl-subcompositor-implementation
-wl-subcompositor-interface
-implement-wl-region
-wl-region-implementation
-wl-region-interface
-wl-output-send-scale
-wl-output-send-done
-wl-output-send-mode
-wl-output-send-geometry
-wl-output-interface
-wl-touch-send-cancel
-wl-touch-send-frame
-wl-touch-send-motion
-wl-touch-send-up
-wl-touch-send-down
-implement-wl-touch
-wl-touch-implementation
-wl-touch-interface
-wl-keyboard-send-repeat-info
-wl-keyboard-send-modifiers
-wl-keyboard-send-key
-wl-keyboard-send-leave
-wl-keyboard-send-enter
-wl-keyboard-send-keymap
-implement-wl-keyboard
-wl-keyboard-implementation
-wl-keyboard-interface
-wl-pointer-send-axis-discrete
-wl-pointer-send-axis-stop
-wl-pointer-send-axis-source
-wl-pointer-send-frame
-wl-pointer-send-axis
-wl-pointer-send-button
-wl-pointer-send-motion
-wl-pointer-send-leave
-wl-pointer-send-enter
-implement-wl-pointer
-wl-pointer-implementation
-wl-pointer-interface
-wl-seat-send-name
-wl-seat-send-capabilities
-implement-wl-seat
-wl-seat-implementation
-wl-seat-interface
-wl-surface-send-leave
-wl-surface-send-enter
-implement-wl-surface
-wl-surface-implementation
-wl-surface-interface
-wl-shell-surface-send-popup-done
-wl-shell-surface-send-configure
-wl-shell-surface-send-ping
-implement-wl-shell-surface
-wl-shell-surface-implementation
-wl-shell-surface-interface
-implement-wl-shell
-wl-shell-implementation
-wl-shell-interface
-implement-wl-data-device-manager
-wl-data-device-manager-implementation
-wl-data-device-manager-interface
-wl-data-device-send-selection
-wl-data-device-send-drop
-wl-data-device-send-motion
-wl-data-device-send-leave
-wl-data-device-send-enter
-wl-data-device-send-data-offer
-implement-wl-data-device
-wl-data-device-implementation
-wl-data-device-interface
-wl-data-source-send-action
-wl-data-source-send-dnd-finished
-wl-data-source-send-dnd-drop-performed
-wl-data-source-send-cancelled
-wl-data-source-send-send
-wl-data-source-send-target
-implement-wl-data-source
-wl-data-source-implementation
-wl-data-source-interface
-wl-data-offer-send-action
-wl-data-offer-send-source-actions
-wl-data-offer-send-offer
-implement-wl-data-offer
-wl-data-offer-implementation
-wl-data-offer-interface
-wl-buffer-send-release
-implement-wl-buffer
-wl-buffer-implementation
-wl-buffer-interface
-wl-shm-send-format
-implement-wl-shm
-wl-shm-implementation
-wl-shm-interface
-implement-wl-shm-pool
-wl-shm-pool-implementation
-wl-shm-pool-interface
-implement-wl-compositor
-wl-compositor-implementation
-wl-compositor-interface
-wl-callback-send-done
-wl-callback-interface
-wl-registry-send-global-remove
-wl-registry-send-global
-implement-wl-registry
-wl-registry-implementation
-wl-registry-interface
-wl-display-send-delete-id
-wl-display-send-error
-implement-wl-display
-wl-display-implementation
-wl-display-interface
-))
-
-(in-package :wayland-server-protocol)
-
-;(define-foreign-library wayland-server
-;(t (:default "libwayland-server")))
-
-(load-foreign-library 'wayland-server-core::wayland-server)
-
-;; Interface wl_display
-;; The core global object.  This is a special singleton object.  It
-;;       is used for internal Wayland protocol features.
-(defparameter wl-display-interface (foreign-symbol-pointer "wl_display_interface"))
-(defcstruct wl-display-implementation
-(sync :pointer)
-(get-registry :pointer)
-)
-
-(defun implement-wl-display (&key (sync nil) (get-registry nil) )
-(let ((implementation (foreign-alloc '(:struct wl-display-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-display-implementation) 'sync) (if sync sync(get-callback (defcallback empty-sync :void
-((client :pointer) (resource :pointer) (callback :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-display-implementation) 'get-registry) (if get-registry get-registry(get-callback (defcallback empty-get-registry :void
-((client :pointer) (resource :pointer) (registry :pointer))
-))
-))
-
-implementation))
-
-(defun wl-display-send-error (resource object-id code message)
-(wl-resource-post-event resource 0 :pointer object-id :uint32 code :string message))
-
-(defun wl-display-send-delete-id (resource id)
-(wl-resource-post-event resource 1 :uint32 id))
-
-
-;; Interface wl_registry
-;; The global registry object.  The server has a number of global
-;;       objects that are available to all clients.  These objects
-;;       typically represent an actual object in the server (for example,
-;;       an input device) or they are singleton objects that provide
-;;       extension functionality.
-;; 
-;;       When a client creates a registry object, the registry object
-;;       will emit a global event for each global currently in the
-;;       registry.  Globals come and go as a result of device or
-;;       monitor hotplugs, reconfiguration or other events, and the
-;;       registry will send out global and global_remove events to
-;;       keep the client up to date with the changes.  To mark the end
-;;       of the initial burst of events, the client can use the
-;;       wl_display.sync request immediately after calling
-;;       wl_display.get_registry.
-;; 
-;;       A client can bind to a global object by using the bind
-;;       request.  This creates a client-side handle that lets the object
-;;       emit events to the client and lets the client invoke requests on
-;;       the object.
-(defparameter wl-registry-interface (foreign-symbol-pointer "wl_registry_interface"))
-(defcstruct wl-registry-implementation
-(bind :pointer)
-)
-
-(defun implement-wl-registry (&key (bind nil) )
-(let ((implementation (foreign-alloc '(:struct wl-registry-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-registry-implementation) 'bind) (if bind bind(get-callback (defcallback empty-bind :void
-((client :pointer) (resource :pointer) (name :uint32)(id :pointer))
-))
-))
-
-implementation))
-
-(defun wl-registry-send-global (resource name interface version)
-(wl-resource-post-event resource 0 :uint32 name :string interface :uint32 version))
-
-(defun wl-registry-send-global-remove (resource name)
-(wl-resource-post-event resource 1 :uint32 name))
-
-
-;; Interface wl_callback
-;; Clients can handle the 'done' event to get notified when
-;;       the related request is done.
-(defparameter wl-callback-interface (foreign-symbol-pointer "wl_callback_interface"))
-(defun wl-callback-send-done (resource callback-data)
-(wl-resource-post-event resource 0 :uint32 callback-data))
-
-
-;; Interface wl_compositor
-;; A compositor.  This object is a singleton global.  The
-;;       compositor is in charge of combining the contents of multiple
-;;       surfaces into one displayable output.
-(defparameter wl-compositor-interface (foreign-symbol-pointer "wl_compositor_interface"))
-(defcstruct wl-compositor-implementation
-(create-surface :pointer)
-(create-region :pointer)
-)
-
-(defun implement-wl-compositor (&key (create-surface nil) (create-region nil) )
-(let ((implementation (foreign-alloc '(:struct wl-compositor-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-compositor-implementation) 'create-surface) (if create-surface create-surface(get-callback (defcallback empty-create-surface :void
-((client :pointer) (resource :pointer) (id :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-compositor-implementation) 'create-region) (if create-region create-region(get-callback (defcallback empty-create-region :void
-((client :pointer) (resource :pointer) (id :pointer))
-))
-))
-
-implementation))
-
-
-;; Interface wl_shm_pool
-;; The wl_shm_pool object encapsulates a piece of memory shared
-;;       between the compositor and client.  Through the wl_shm_pool
-;;       object, the client can allocate shared memory wl_buffer objects.
-;;       All objects created through the same pool share the same
-;;       underlying mapped memory. Reusing the mapped memory avoids the
-;;       setup/teardown overhead and is useful when interactively resizing
-;;       a surface or for many small buffers.
-(defparameter wl-shm-pool-interface (foreign-symbol-pointer "wl_shm_pool_interface"))
-(defcstruct wl-shm-pool-implementation
-(create-buffer :pointer)
-(destroy :pointer)
-(resize :pointer)
-)
-
-(defun implement-wl-shm-pool (&key (create-buffer nil) (destroy nil) (resize nil) )
-(let ((implementation (foreign-alloc '(:struct wl-shm-pool-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-shm-pool-implementation) 'create-buffer) (if create-buffer create-buffer(get-callback (defcallback empty-create-buffer :void
-((client :pointer) (resource :pointer) (id :pointer)(offset :int32)(width :int32)(height :int32)(stride :int32)(format :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shm-pool-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shm-pool-implementation) 'resize) (if resize resize(get-callback (defcallback empty-resize :void
-((client :pointer) (resource :pointer) (size :int32))
-))
-))
-
-implementation))
-
-
-;; Interface wl_shm
-;; A global singleton object that provides support for shared
-;;       memory.
-;; 
-;;       Clients can create wl_shm_pool objects using the create_pool
-;;       request.
-;; 
-;;       At connection setup time, the wl_shm object emits one or more
-;;       format events to inform clients about the valid pixel formats
-;;       that can be used for buffers.
-(defparameter wl-shm-interface (foreign-symbol-pointer "wl_shm_interface"))
-(defcstruct wl-shm-implementation
-(create-pool :pointer)
-)
-
-(defun implement-wl-shm (&key (create-pool nil) )
-(let ((implementation (foreign-alloc '(:struct wl-shm-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-shm-implementation) 'create-pool) (if create-pool create-pool(get-callback (defcallback empty-create-pool :void
-((client :pointer) (resource :pointer) (id :pointer)(fd :int32)(size :int32))
-))
-))
-
-implementation))
-
-(defun wl-shm-send-format (resource format)
-(wl-resource-post-event resource 0 :uint32 format))
-
-
-;; Interface wl_buffer
-;; A buffer provides the content for a wl_surface. Buffers are
-;;       created through factory interfaces such as wl_drm, wl_shm or
-;;       similar. It has a width and a height and can be attached to a
-;;       wl_surface, but the mechanism by which a client provides and
-;;       updates the contents is defined by the buffer factory interface.
-(defparameter wl-buffer-interface (foreign-symbol-pointer "wl_buffer_interface"))
-(defcstruct wl-buffer-implementation
-(destroy :pointer)
-)
-
-(defun implement-wl-buffer (&key (destroy nil) )
-(let ((implementation (foreign-alloc '(:struct wl-buffer-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-buffer-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun wl-buffer-send-release (resource )
-(wl-resource-post-event resource 0 ))
-
-
-;; Interface wl_data_offer
-;; A wl_data_offer represents a piece of data offered for transfer
-;;       by another client (the source client).  It is used by the
-;;       copy-and-paste and drag-and-drop mechanisms.  The offer
-;;       describes the different mime types that the data can be
-;;       converted to and provides the mechanism for transferring the
-;;       data directly from the source client.
-(defparameter wl-data-offer-interface (foreign-symbol-pointer "wl_data_offer_interface"))
-(defcstruct wl-data-offer-implementation
-(accept :pointer)
-(receive :pointer)
-(destroy :pointer)
-(finish :pointer)
-(set-actions :pointer)
-)
-
-(defun implement-wl-data-offer (&key (accept nil) (receive nil) (destroy nil) (finish nil) (set-actions nil) )
-(let ((implementation (foreign-alloc '(:struct wl-data-offer-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-data-offer-implementation) 'accept) (if accept accept(get-callback (defcallback empty-accept :void
-((client :pointer) (resource :pointer) (serial :uint32)(mime-type :string))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-offer-implementation) 'receive) (if receive receive(get-callback (defcallback empty-receive :void
-((client :pointer) (resource :pointer) (mime-type :string)(fd :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-offer-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-offer-implementation) 'finish) (if finish finish(get-callback (defcallback empty-finish :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-offer-implementation) 'set-actions) (if set-actions set-actions(get-callback (defcallback empty-set-actions :void
-((client :pointer) (resource :pointer) (dnd-actions :uint32)(preferred-action :uint32))
-))
-))
-
-implementation))
-
-(defun wl-data-offer-send-offer (resource mime-type)
-(wl-resource-post-event resource 0 :string mime-type))
-
-(defun wl-data-offer-send-source-actions (resource source-actions)
-(wl-resource-post-event resource 1 :uint32 source-actions))
-
-(defun wl-data-offer-send-action (resource dnd-action)
-(wl-resource-post-event resource 2 :uint32 dnd-action))
-
-
-;; Interface wl_data_source
-;; The wl_data_source object is the source side of a wl_data_offer.
-;;       It is created by the source client in a data transfer and
-;;       provides a way to describe the offered data and a way to respond
-;;       to requests to transfer the data.
-(defparameter wl-data-source-interface (foreign-symbol-pointer "wl_data_source_interface"))
-(defcstruct wl-data-source-implementation
-(offer :pointer)
-(destroy :pointer)
-(set-actions :pointer)
-)
-
-(defun implement-wl-data-source (&key (offer nil) (destroy nil) (set-actions nil) )
-(let ((implementation (foreign-alloc '(:struct wl-data-source-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-data-source-implementation) 'offer) (if offer offer(get-callback (defcallback empty-offer :void
-((client :pointer) (resource :pointer) (mime-type :string))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-source-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-source-implementation) 'set-actions) (if set-actions set-actions(get-callback (defcallback empty-set-actions :void
-((client :pointer) (resource :pointer) (dnd-actions :uint32))
-))
-))
-
-implementation))
-
-(defun wl-data-source-send-target (resource mime-type)
-(wl-resource-post-event resource 0 :string mime-type))
-
-(defun wl-data-source-send-send (resource mime-type fd)
-(wl-resource-post-event resource 1 :string mime-type :int32 fd))
-
-(defun wl-data-source-send-cancelled (resource )
-(wl-resource-post-event resource 2 ))
-
-(defun wl-data-source-send-dnd-drop-performed (resource )
-(wl-resource-post-event resource 3 ))
-
-(defun wl-data-source-send-dnd-finished (resource )
-(wl-resource-post-event resource 4 ))
-
-(defun wl-data-source-send-action (resource dnd-action)
-(wl-resource-post-event resource 5 :uint32 dnd-action))
-
-
-;; Interface wl_data_device
-;; There is one wl_data_device per seat which can be obtained
-;;       from the global wl_data_device_manager singleton.
-;; 
-;;       A wl_data_device provides access to inter-client data transfer
-;;       mechanisms such as copy-and-paste and drag-and-drop.
-(defparameter wl-data-device-interface (foreign-symbol-pointer "wl_data_device_interface"))
-(defcstruct wl-data-device-implementation
-(start-drag :pointer)
-(set-selection :pointer)
-(release :pointer)
-)
-
-(defun implement-wl-data-device (&key (start-drag nil) (set-selection nil) (release nil) )
-(let ((implementation (foreign-alloc '(:struct wl-data-device-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-data-device-implementation) 'start-drag) (if start-drag start-drag(get-callback (defcallback empty-start-drag :void
-((client :pointer) (resource :pointer) (source :pointer)(origin :pointer)(icon :pointer)(serial :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-device-implementation) 'set-selection) (if set-selection set-selection(get-callback (defcallback empty-set-selection :void
-((client :pointer) (resource :pointer) (source :pointer)(serial :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-device-implementation) 'release) (if release release(get-callback (defcallback empty-release :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun wl-data-device-send-data-offer (resource id)
-(wl-resource-post-event resource 0 :pointer id))
-
-(defun wl-data-device-send-enter (resource serial surface x y id)
-(wl-resource-post-event resource 1 :uint32 serial :pointer surface :int32 x :int32 y :pointer id))
-
-(defun wl-data-device-send-leave (resource )
-(wl-resource-post-event resource 2 ))
-
-(defun wl-data-device-send-motion (resource time x y)
-(wl-resource-post-event resource 3 :uint32 time :int32 x :int32 y))
-
-(defun wl-data-device-send-drop (resource )
-(wl-resource-post-event resource 4 ))
-
-(defun wl-data-device-send-selection (resource id)
-(wl-resource-post-event resource 5 :pointer id))
-
-
-;; Interface wl_data_device_manager
-;; The wl_data_device_manager is a singleton global object that
-;;       provides access to inter-client data transfer mechanisms such as
-;;       copy-and-paste and drag-and-drop.  These mechanisms are tied to
-;;       a wl_seat and this interface lets a client get a wl_data_device
-;;       corresponding to a wl_seat.
-;; 
-;;       Depending on the version bound, the objects created from the bound
-;;       wl_data_device_manager object will have different requirements for
-;;       functioning properly. See wl_data_source.set_actions,
-;;       wl_data_offer.accept and wl_data_offer.finish for details.
-(defparameter wl-data-device-manager-interface (foreign-symbol-pointer "wl_data_device_manager_interface"))
-(defcstruct wl-data-device-manager-implementation
-(create-data-source :pointer)
-(get-data-device :pointer)
-)
-
-(defun implement-wl-data-device-manager (&key (create-data-source nil) (get-data-device nil) )
-(let ((implementation (foreign-alloc '(:struct wl-data-device-manager-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-data-device-manager-implementation) 'create-data-source) (if create-data-source create-data-source(get-callback (defcallback empty-create-data-source :void
-((client :pointer) (resource :pointer) (id :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-data-device-manager-implementation) 'get-data-device) (if get-data-device get-data-device(get-callback (defcallback empty-get-data-device :void
-((client :pointer) (resource :pointer) (id :pointer)(seat :pointer))
-))
-))
-
-implementation))
-
-
-;; Interface wl_shell
-;; This interface is implemented by servers that provide
-;;       desktop-style user interfaces.
-;; 
-;;       It allows clients to associate a wl_shell_surface with
-;;       a basic surface.
-(defparameter wl-shell-interface (foreign-symbol-pointer "wl_shell_interface"))
-(defcstruct wl-shell-implementation
-(get-shell-surface :pointer)
-)
-
-(defun implement-wl-shell (&key (get-shell-surface nil) )
-(let ((implementation (foreign-alloc '(:struct wl-shell-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-shell-implementation) 'get-shell-surface) (if get-shell-surface get-shell-surface(get-callback (defcallback empty-get-shell-surface :void
-((client :pointer) (resource :pointer) (id :pointer)(surface :pointer))
-))
-))
-
-implementation))
-
-
-;; Interface wl_shell_surface
-;; An interface that may be implemented by a wl_surface, for
-;;       implementations that provide a desktop-style user interface.
-;; 
-;;       It provides requests to treat surfaces like toplevel, fullscreen
-;;       or popup windows, move, resize or maximize them, associate
-;;       metadata like title and class, etc.
-;; 
-;;       On the server side the object is automatically destroyed when
-;;       the related wl_surface is destroyed. On the client side,
-;;       wl_shell_surface_destroy() must be called before destroying
-;;       the wl_surface object.
-(defparameter wl-shell-surface-interface (foreign-symbol-pointer "wl_shell_surface_interface"))
-(defcstruct wl-shell-surface-implementation
-(pong :pointer)
-(move :pointer)
-(resize :pointer)
-(set-toplevel :pointer)
-(set-transient :pointer)
-(set-fullscreen :pointer)
-(set-popup :pointer)
-(set-maximized :pointer)
-(set-title :pointer)
-(set-class :pointer)
-)
-
-(defun implement-wl-shell-surface (&key (pong nil) (move nil) (resize nil) (set-toplevel nil) (set-transient nil) (set-fullscreen nil) (set-popup nil) (set-maximized nil) (set-title nil) (set-class nil) )
-(let ((implementation (foreign-alloc '(:struct wl-shell-surface-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'pong) (if pong pong(get-callback (defcallback empty-pong :void
-((client :pointer) (resource :pointer) (serial :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'move) (if move move(get-callback (defcallback empty-move :void
-((client :pointer) (resource :pointer) (seat :pointer)(serial :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'resize) (if resize resize(get-callback (defcallback empty-resize :void
-((client :pointer) (resource :pointer) (seat :pointer)(serial :uint32)(edges :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-toplevel) (if set-toplevel set-toplevel(get-callback (defcallback empty-set-toplevel :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-transient) (if set-transient set-transient(get-callback (defcallback empty-set-transient :void
-((client :pointer) (resource :pointer) (parent :pointer)(x :int32)(y :int32)(flags :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-fullscreen) (if set-fullscreen set-fullscreen(get-callback (defcallback empty-set-fullscreen :void
-((client :pointer) (resource :pointer) (method :uint32)(framerate :uint32)(output :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-popup) (if set-popup set-popup(get-callback (defcallback empty-set-popup :void
-((client :pointer) (resource :pointer) (seat :pointer)(serial :uint32)(parent :pointer)(x :int32)(y :int32)(flags :uint32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-maximized) (if set-maximized set-maximized(get-callback (defcallback empty-set-maximized :void
-((client :pointer) (resource :pointer) (output :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-title) (if set-title set-title(get-callback (defcallback empty-set-title :void
-((client :pointer) (resource :pointer) (title :string))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-shell-surface-implementation) 'set-class) (if set-class set-class(get-callback (defcallback empty-set-class :void
-((client :pointer) (resource :pointer) (class- :string))
-))
-))
-
-implementation))
-
-(defun wl-shell-surface-send-ping (resource serial)
-(wl-resource-post-event resource 0 :uint32 serial))
-
-(defun wl-shell-surface-send-configure (resource edges width height)
-(wl-resource-post-event resource 1 :uint32 edges :int32 width :int32 height))
-
-(defun wl-shell-surface-send-popup-done (resource )
-(wl-resource-post-event resource 2 ))
-
-
-;; Interface wl_surface
-;; A surface is a rectangular area that is displayed on the screen.
-;;       It has a location, size and pixel contents.
-;; 
-;;       The size of a surface (and relative positions on it) is described
-;;       in surface-local coordinates, which may differ from the buffer
-;;       coordinates of the pixel content, in case a buffer_transform
-;;       or a buffer_scale is used.
-;; 
-;;       A surface without a "role" is fairly useless: a compositor does
-;;       not know where, when or how to present it. The role is the
-;;       purpose of a wl_surface. Examples of roles are a cursor for a
-;;       pointer (as set by wl_pointer.set_cursor), a drag icon
-;;       (wl_data_device.start_drag), a sub-surface
-;;       (wl_subcompositor.get_subsurface), and a window as defined by a
-;;       shell protocol (e.g. wl_shell.get_shell_surface).
-;; 
-;;       A surface can have only one role at a time. Initially a
-;;       wl_surface does not have a role. Once a wl_surface is given a
-;;       role, it is set permanently for the whole lifetime of the
-;;       wl_surface object. Giving the current role again is allowed,
-;;       unless explicitly forbidden by the relevant interface
-;;       specification.
-;; 
-;;       Surface roles are given by requests in other interfaces such as
-;;       wl_pointer.set_cursor. The request should explicitly mention
-;;       that this request gives a role to a wl_surface. Often, this
-;;       request also creates a new protocol object that represents the
-;;       role and adds additional functionality to wl_surface. When a
-;;       client wants to destroy a wl_surface, they must destroy this 'role
-;;       object' before the wl_surface.
-;; 
-;;       Destroying the role object does not remove the role from the
-;;       wl_surface, but it may stop the wl_surface from "playing the role".
-;;       For instance, if a wl_subsurface object is destroyed, the wl_surface
-;;       it was created for will be unmapped and forget its position and
-;;       z-order. It is allowed to create a wl_subsurface for the same
-;;       wl_surface again, but it is not allowed to use the wl_surface as
-;;       a cursor (cursor is a different role than sub-surface, and role
-;;       switching is not allowed).
-(defparameter wl-surface-interface (foreign-symbol-pointer "wl_surface_interface"))
-(defcstruct wl-surface-implementation
-(destroy :pointer)
-(attach :pointer)
-(damage :pointer)
-(frame :pointer)
-(set-opaque-region :pointer)
-(set-input-region :pointer)
-(commit :pointer)
-(set-buffer-transform :pointer)
-(set-buffer-scale :pointer)
-(damage-buffer :pointer)
-)
-
-(defun implement-wl-surface (&key (destroy nil) (attach nil) (damage nil) (frame nil) (set-opaque-region nil) (set-input-region nil) (commit nil) (set-buffer-transform nil) (set-buffer-scale nil) (damage-buffer nil) )
-(let ((implementation (foreign-alloc '(:struct wl-surface-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'attach) (if attach attach(get-callback (defcallback empty-attach :void
-((client :pointer) (resource :pointer) (buffer :pointer)(x :int32)(y :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'damage) (if damage damage(get-callback (defcallback empty-damage :void
-((client :pointer) (resource :pointer) (x :int32)(y :int32)(width :int32)(height :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'frame) (if frame frame(get-callback (defcallback empty-frame :void
-((client :pointer) (resource :pointer) (callback :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'set-opaque-region) (if set-opaque-region set-opaque-region(get-callback (defcallback empty-set-opaque-region :void
-((client :pointer) (resource :pointer) (region :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'set-input-region) (if set-input-region set-input-region(get-callback (defcallback empty-set-input-region :void
-((client :pointer) (resource :pointer) (region :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'commit) (if commit commit(get-callback (defcallback empty-commit :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'set-buffer-transform) (if set-buffer-transform set-buffer-transform(get-callback (defcallback empty-set-buffer-transform :void
-((client :pointer) (resource :pointer) (transform :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'set-buffer-scale) (if set-buffer-scale set-buffer-scale(get-callback (defcallback empty-set-buffer-scale :void
-((client :pointer) (resource :pointer) (scale :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-surface-implementation) 'damage-buffer) (if damage-buffer damage-buffer(get-callback (defcallback empty-damage-buffer :void
-((client :pointer) (resource :pointer) (x :int32)(y :int32)(width :int32)(height :int32))
-))
-))
-
-implementation))
-
-(defun wl-surface-send-enter (resource output)
-(wl-resource-post-event resource 0 :pointer output))
-
-(defun wl-surface-send-leave (resource output)
-(wl-resource-post-event resource 1 :pointer output))
-
-
-;; Interface wl_seat
-;; A seat is a group of keyboards, pointer and touch devices. This
-;;       object is published as a global during start up, or when such a
-;;       device is hot plugged.  A seat typically has a pointer and
-;;       maintains a keyboard focus and a pointer focus.
-(defparameter wl-seat-interface (foreign-symbol-pointer "wl_seat_interface"))
-(defcstruct wl-seat-implementation
-(get-pointer :pointer)
-(get-keyboard :pointer)
-(get-touch :pointer)
-(release :pointer)
-)
-
-(defun implement-wl-seat (&key (get-pointer nil) (get-keyboard nil) (get-touch nil) (release nil) )
-(let ((implementation (foreign-alloc '(:struct wl-seat-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-seat-implementation) 'get-pointer) (if get-pointer get-pointer(get-callback (defcallback empty-get-pointer :void
-((client :pointer) (resource :pointer) (id :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-seat-implementation) 'get-keyboard) (if get-keyboard get-keyboard(get-callback (defcallback empty-get-keyboard :void
-((client :pointer) (resource :pointer) (id :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-seat-implementation) 'get-touch) (if get-touch get-touch(get-callback (defcallback empty-get-touch :void
-((client :pointer) (resource :pointer) (id :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-seat-implementation) 'release) (if release release(get-callback (defcallback empty-release :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun wl-seat-send-capabilities (resource capabilities)
-(wl-resource-post-event resource 0 :uint32 capabilities))
-
-(defun wl-seat-send-name (resource name)
-(wl-resource-post-event resource 1 :string name))
-
-
-;; Interface wl_pointer
-;; The wl_pointer interface represents one or more input devices,
-;;       such as mice, which control the pointer location and pointer_focus
-;;       of a seat.
-;; 
-;;       The wl_pointer interface generates motion, enter and leave
-;;       events for the surfaces that the pointer is located over,
-;;       and button and axis events for button presses, button releases
-;;       and scrolling.
-(defparameter wl-pointer-interface (foreign-symbol-pointer "wl_pointer_interface"))
-(defcstruct wl-pointer-implementation
-(set-cursor :pointer)
-(release :pointer)
-)
-
-(defun implement-wl-pointer (&key (set-cursor nil) (release nil) )
-(let ((implementation (foreign-alloc '(:struct wl-pointer-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-pointer-implementation) 'set-cursor) (if set-cursor set-cursor(get-callback (defcallback empty-set-cursor :void
-((client :pointer) (resource :pointer) (serial :uint32)(surface :pointer)(hotspot-x :int32)(hotspot-y :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-pointer-implementation) 'release) (if release release(get-callback (defcallback empty-release :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun wl-pointer-send-enter (resource serial surface surface-x surface-y)
-(wl-resource-post-event resource 0 :uint32 serial :pointer surface :int32 surface-x :int32 surface-y))
-
-(defun wl-pointer-send-leave (resource serial surface)
-(wl-resource-post-event resource 1 :uint32 serial :pointer surface))
-
-(defun wl-pointer-send-motion (resource time surface-x surface-y)
-(wl-resource-post-event resource 2 :uint32 time :int32 surface-x :int32 surface-y))
-
-(defun wl-pointer-send-button (resource serial time button state)
-(wl-resource-post-event resource 3 :uint32 serial :uint32 time :uint32 button :uint32 state))
-
-(defun wl-pointer-send-axis (resource time axis value)
-(wl-resource-post-event resource 4 :uint32 time :uint32 axis :int32 value))
-
-(defun wl-pointer-send-frame (resource )
-(wl-resource-post-event resource 5 ))
-
-(defun wl-pointer-send-axis-source (resource axis-source)
-(wl-resource-post-event resource 6 :uint32 axis-source))
-
-(defun wl-pointer-send-axis-stop (resource time axis)
-(wl-resource-post-event resource 7 :uint32 time :uint32 axis))
-
-(defun wl-pointer-send-axis-discrete (resource axis discrete)
-(wl-resource-post-event resource 8 :uint32 axis :int32 discrete))
-
-
-;; Interface wl_keyboard
-;; The wl_keyboard interface represents one or more keyboards
-;;       associated with a seat.
-(defparameter wl-keyboard-interface (foreign-symbol-pointer "wl_keyboard_interface"))
-(defcstruct wl-keyboard-implementation
-(release :pointer)
-)
-
-(defun implement-wl-keyboard (&key (release nil) )
-(let ((implementation (foreign-alloc '(:struct wl-keyboard-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-keyboard-implementation) 'release) (if release release(get-callback (defcallback empty-release :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun wl-keyboard-send-keymap (resource format fd size)
-(wl-resource-post-event resource 0 :uint32 format :int32 fd :uint32 size))
-
-(defun wl-keyboard-send-enter (resource serial surface keys)
-(wl-resource-post-event resource 1 :uint32 serial :pointer surface :pointer keys))
-
-(defun wl-keyboard-send-leave (resource serial surface)
-(wl-resource-post-event resource 2 :uint32 serial :pointer surface))
-
-(defun wl-keyboard-send-key (resource serial time key state)
-(wl-resource-post-event resource 3 :uint32 serial :uint32 time :uint32 key :uint32 state))
-
-(defun wl-keyboard-send-modifiers (resource serial mods-depressed mods-latched mods-locked group)
-(wl-resource-post-event resource 4 :uint32 serial :uint32 mods-depressed :uint32 mods-latched :uint32 mods-locked :uint32 group))
-
-(defun wl-keyboard-send-repeat-info (resource rate delay)
-(wl-resource-post-event resource 5 :int32 rate :int32 delay))
-
-
-;; Interface wl_touch
-;; The wl_touch interface represents a touchscreen
-;;       associated with a seat.
-;; 
-;;       Touch interactions can consist of one or more contacts.
-;;       For each contact, a series of events is generated, starting
-;;       with a down event, followed by zero or more motion events,
-;;       and ending with an up event. Events relating to the same
-;;       contact point can be identified by the ID of the sequence.
-(defparameter wl-touch-interface (foreign-symbol-pointer "wl_touch_interface"))
-(defcstruct wl-touch-implementation
-(release :pointer)
-)
-
-(defun implement-wl-touch (&key (release nil) )
-(let ((implementation (foreign-alloc '(:struct wl-touch-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-touch-implementation) 'release) (if release release(get-callback (defcallback empty-release :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
-
-(defun wl-touch-send-down (resource serial time surface id x y)
-(wl-resource-post-event resource 0 :uint32 serial :uint32 time :pointer surface :int32 id :int32 x :int32 y))
-
-(defun wl-touch-send-up (resource serial time id)
-(wl-resource-post-event resource 1 :uint32 serial :uint32 time :int32 id))
-
-(defun wl-touch-send-motion (resource time id x y)
-(wl-resource-post-event resource 2 :uint32 time :int32 id :int32 x :int32 y))
-
-(defun wl-touch-send-frame (resource )
-(wl-resource-post-event resource 3 ))
-
-(defun wl-touch-send-cancel (resource )
-(wl-resource-post-event resource 4 ))
-
-
-;; Interface wl_output
-;; An output describes part of the compositor geometry.  The
-;;       compositor works in the 'compositor coordinate system' and an
-;;       output corresponds to a rectangular area in that space that is
-;;       actually visible.  This typically corresponds to a monitor that
-;;       displays part of the compositor space.  This object is published
-;;       as global during start up, or when a monitor is hotplugged.
-(defparameter wl-output-interface (foreign-symbol-pointer "wl_output_interface"))
-(defun wl-output-send-geometry (resource x y physical-width physical-height subpixel make model transform)
-(wl-resource-post-event resource 0 :int32 x :int32 y :int32 physical-width :int32 physical-height :int32 subpixel :string make :string model :int32 transform))
-
-(defun wl-output-send-mode (resource flags width height refresh)
-(wl-resource-post-event resource 1 :uint32 flags :int32 width :int32 height :int32 refresh))
-
-(defun wl-output-send-done (resource )
-(wl-resource-post-event resource 2 ))
-
-(defun wl-output-send-scale (resource factor)
-(wl-resource-post-event resource 3 :int32 factor))
-
-
-;; Interface wl_region
-;; A region object describes an area.
-;; 
-;;       Region objects are used to describe the opaque and input
-;;       regions of a surface.
-(defparameter wl-region-interface (foreign-symbol-pointer "wl_region_interface"))
-(defcstruct wl-region-implementation
-(destroy :pointer)
-(add :pointer)
-(subtract :pointer)
-)
-
-(defun implement-wl-region (&key (destroy nil) (add nil) (subtract nil) )
-(let ((implementation (foreign-alloc '(:struct wl-region-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-region-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-region-implementation) 'add) (if add add(get-callback (defcallback empty-add :void
-((client :pointer) (resource :pointer) (x :int32)(y :int32)(width :int32)(height :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-region-implementation) 'subtract) (if subtract subtract(get-callback (defcallback empty-subtract :void
-((client :pointer) (resource :pointer) (x :int32)(y :int32)(width :int32)(height :int32))
-))
-))
-
-implementation))
-
-
-;; Interface wl_subcompositor
-;; The global interface exposing sub-surface compositing capabilities.
-;;       A wl_surface, that has sub-surfaces associated, is called the
-;;       parent surface. Sub-surfaces can be arbitrarily nested and create
-;;       a tree of sub-surfaces.
-;; 
-;;       The root surface in a tree of sub-surfaces is the main
-;;       surface. The main surface cannot be a sub-surface, because
-;;       sub-surfaces must always have a parent.
-;; 
-;;       A main surface with its sub-surfaces forms a (compound) window.
-;;       For window management purposes, this set of wl_surface objects is
-;;       to be considered as a single window, and it should also behave as
-;;       such.
-;; 
-;;       The aim of sub-surfaces is to offload some of the compositing work
-;;       within a window from clients to the compositor. A prime example is
-;;       a video player with decorations and video in separate wl_surface
-;;       objects. This should allow the compositor to pass YUV video buffer
-;;       processing to dedicated overlay hardware when possible.
-(defparameter wl-subcompositor-interface (foreign-symbol-pointer "wl_subcompositor_interface"))
-(defcstruct wl-subcompositor-implementation
-(destroy :pointer)
-(get-subsurface :pointer)
-)
-
-(defun implement-wl-subcompositor (&key (destroy nil) (get-subsurface nil) )
-(let ((implementation (foreign-alloc '(:struct wl-subcompositor-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-subcompositor-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-subcompositor-implementation) 'get-subsurface) (if get-subsurface get-subsurface(get-callback (defcallback empty-get-subsurface :void
-((client :pointer) (resource :pointer) (id :pointer)(surface :pointer)(parent :pointer))
-))
-))
-
-implementation))
-
-
-;; Interface wl_subsurface
-;; An additional interface to a wl_surface object, which has been
-;;       made a sub-surface. A sub-surface has one parent surface. A
-;;       sub-surface's size and position are not limited to that of the parent.
-;;       Particularly, a sub-surface is not automatically clipped to its
-;;       parent's area.
-;; 
-;;       A sub-surface becomes mapped, when a non-NULL wl_buffer is applied
-;;       and the parent surface is mapped. The order of which one happens
-;;       first is irrelevant. A sub-surface is hidden if the parent becomes
-;;       hidden, or if a NULL wl_buffer is applied. These rules apply
-;;       recursively through the tree of surfaces.
-;; 
-;;       The behaviour of a wl_surface.commit request on a sub-surface
-;;       depends on the sub-surface's mode. The possible modes are
-;;       synchronized and desynchronized, see methods
-;;       wl_subsurface.set_sync and wl_subsurface.set_desync. Synchronized
-;;       mode caches the wl_surface state to be applied when the parent's
-;;       state gets applied, and desynchronized mode applies the pending
-;;       wl_surface state directly. A sub-surface is initially in the
-;;       synchronized mode.
-;; 
-;;       Sub-surfaces have also other kind of state, which is managed by
-;;       wl_subsurface requests, as opposed to wl_surface requests. This
-;;       state includes the sub-surface position relative to the parent
-;;       surface (wl_subsurface.set_position), and the stacking order of
-;;       the parent and its sub-surfaces (wl_subsurface.place_above and
-;;       .place_below). This state is applied when the parent surface's
-;;       wl_surface state is applied, regardless of the sub-surface's mode.
-;;       As the exception, set_sync and set_desync are effective immediately.
-;; 
-;;       The main surface can be thought to be always in desynchronized mode,
-;;       since it does not have a parent in the sub-surfaces sense.
-;; 
-;;       Even if a sub-surface is in desynchronized mode, it will behave as
-;;       in synchronized mode, if its parent surface behaves as in
-;;       synchronized mode. This rule is applied recursively throughout the
-;;       tree of surfaces. This means, that one can set a sub-surface into
-;;       synchronized mode, and then assume that all its child and grand-child
-;;       sub-surfaces are synchronized, too, without explicitly setting them.
-;; 
-;;       If the wl_surface associated with the wl_subsurface is destroyed, the
-;;       wl_subsurface object becomes inert. Note, that destroying either object
-;;       takes effect immediately. If you need to synchronize the removal
-;;       of a sub-surface to the parent surface update, unmap the sub-surface
-;;       first by attaching a NULL wl_buffer, update parent, and then destroy
-;;       the sub-surface.
-;; 
-;;       If the parent wl_surface object is destroyed, the sub-surface is
-;;       unmapped.
-(defparameter wl-subsurface-interface (foreign-symbol-pointer "wl_subsurface_interface"))
-(defcstruct wl-subsurface-implementation
-(destroy :pointer)
-(set-position :pointer)
-(place-above :pointer)
-(place-below :pointer)
-(set-sync :pointer)
-(set-desync :pointer)
-)
-
-(defun implement-wl-subsurface (&key (destroy nil) (set-position nil) (place-above nil) (place-below nil) (set-sync nil) (set-desync nil) )
-(let ((implementation (foreign-alloc '(:struct wl-subsurface-implementation))))
-(setf (foreign-slot-value implementation '(:struct wl-subsurface-implementation) 'destroy) (if destroy destroy(get-callback (defcallback empty-destroy :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-subsurface-implementation) 'set-position) (if set-position set-position(get-callback (defcallback empty-set-position :void
-((client :pointer) (resource :pointer) (x :int32)(y :int32))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-subsurface-implementation) 'place-above) (if place-above place-above(get-callback (defcallback empty-place-above :void
-((client :pointer) (resource :pointer) (sibling :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-subsurface-implementation) 'place-below) (if place-below place-below(get-callback (defcallback empty-place-below :void
-((client :pointer) (resource :pointer) (sibling :pointer))
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-subsurface-implementation) 'set-sync) (if set-sync set-sync(get-callback (defcallback empty-set-sync :void
-((client :pointer) (resource :pointer) )
-))
-))
-(setf (foreign-slot-value implementation '(:struct wl-subsurface-implementation) 'set-desync) (if set-desync set-desync(get-callback (defcallback empty-set-desync :void
-((client :pointer) (resource :pointer) )
-))
-))
-
-implementation))
+(DEFPACKAGE :WAYLAND-SERVER-PROTOCOL
+  (:USE :COMMON-LISP :CFFI :WAYLAND-UTIL :WAYLAND-SERVER-CORE)
+  (:EXPORT WL-DISPLAY-INTERFACE
+           WL-DISPLAY-IMPLEMENTATION
+           IMPLEMENT-WL-DISPLAY
+           WL-DISPLAY-SEND-ERROR
+           WL-DISPLAY-SEND-DELETE-ID
+           WL-REGISTRY-INTERFACE
+           WL-REGISTRY-IMPLEMENTATION
+           IMPLEMENT-WL-REGISTRY
+           WL-REGISTRY-SEND-GLOBAL
+           WL-REGISTRY-SEND-GLOBAL-REMOVE
+           WL-CALLBACK-INTERFACE
+           WL-CALLBACK-IMPLEMENTATION
+           IMPLEMENT-WL-CALLBACK
+           WL-CALLBACK-SEND-DONE
+           WL-COMPOSITOR-INTERFACE
+           WL-COMPOSITOR-IMPLEMENTATION
+           IMPLEMENT-WL-COMPOSITOR
+           WL-SHM-POOL-INTERFACE
+           WL-SHM-POOL-IMPLEMENTATION
+           IMPLEMENT-WL-SHM-POOL
+           WL-SHM-INTERFACE
+           WL-SHM-IMPLEMENTATION
+           IMPLEMENT-WL-SHM
+           WL-SHM-SEND-FORMAT
+           WL-BUFFER-INTERFACE
+           WL-BUFFER-IMPLEMENTATION
+           IMPLEMENT-WL-BUFFER
+           WL-BUFFER-SEND-RELEASE
+           WL-DATA-OFFER-INTERFACE
+           WL-DATA-OFFER-IMPLEMENTATION
+           IMPLEMENT-WL-DATA-OFFER
+           WL-DATA-OFFER-SEND-OFFER
+           WL-DATA-OFFER-SEND-SOURCE-ACTIONS
+           WL-DATA-OFFER-SEND-ACTION
+           WL-DATA-SOURCE-INTERFACE
+           WL-DATA-SOURCE-IMPLEMENTATION
+           IMPLEMENT-WL-DATA-SOURCE
+           WL-DATA-SOURCE-SEND-TARGET
+           WL-DATA-SOURCE-SEND-SEND
+           WL-DATA-SOURCE-SEND-CANCELLED
+           WL-DATA-SOURCE-SEND-DND-DROP-PERFORMED
+           WL-DATA-SOURCE-SEND-DND-FINISHED
+           WL-DATA-SOURCE-SEND-ACTION
+           WL-DATA-DEVICE-INTERFACE
+           WL-DATA-DEVICE-IMPLEMENTATION
+           IMPLEMENT-WL-DATA-DEVICE
+           WL-DATA-DEVICE-SEND-DATA-OFFER
+           WL-DATA-DEVICE-SEND-ENTER
+           WL-DATA-DEVICE-SEND-LEAVE
+           WL-DATA-DEVICE-SEND-MOTION
+           WL-DATA-DEVICE-SEND-DROP
+           WL-DATA-DEVICE-SEND-SELECTION
+           WL-DATA-DEVICE-MANAGER-INTERFACE
+           WL-DATA-DEVICE-MANAGER-IMPLEMENTATION
+           IMPLEMENT-WL-DATA-DEVICE-MANAGER
+           WL-SHELL-INTERFACE
+           WL-SHELL-IMPLEMENTATION
+           IMPLEMENT-WL-SHELL
+           WL-SHELL-SURFACE-INTERFACE
+           WL-SHELL-SURFACE-IMPLEMENTATION
+           IMPLEMENT-WL-SHELL-SURFACE
+           WL-SHELL-SURFACE-SEND-PING
+           WL-SHELL-SURFACE-SEND-CONFIGURE
+           WL-SHELL-SURFACE-SEND-POPUP-DONE
+           WL-SURFACE-INTERFACE
+           WL-SURFACE-IMPLEMENTATION
+           IMPLEMENT-WL-SURFACE
+           WL-SURFACE-SEND-ENTER
+           WL-SURFACE-SEND-LEAVE
+           WL-SEAT-INTERFACE
+           WL-SEAT-IMPLEMENTATION
+           IMPLEMENT-WL-SEAT
+           WL-SEAT-SEND-CAPABILITIES
+           WL-SEAT-SEND-NAME
+           WL-POINTER-INTERFACE
+           WL-POINTER-IMPLEMENTATION
+           IMPLEMENT-WL-POINTER
+           WL-POINTER-SEND-ENTER
+           WL-POINTER-SEND-LEAVE
+           WL-POINTER-SEND-MOTION
+           WL-POINTER-SEND-BUTTON
+           WL-POINTER-SEND-AXIS
+           WL-POINTER-SEND-FRAME
+           WL-POINTER-SEND-AXIS-SOURCE
+           WL-POINTER-SEND-AXIS-STOP
+           WL-POINTER-SEND-AXIS-DISCRETE
+           WL-KEYBOARD-INTERFACE
+           WL-KEYBOARD-IMPLEMENTATION
+           IMPLEMENT-WL-KEYBOARD
+           WL-KEYBOARD-SEND-KEYMAP
+           WL-KEYBOARD-SEND-ENTER
+           WL-KEYBOARD-SEND-LEAVE
+           WL-KEYBOARD-SEND-KEY
+           WL-KEYBOARD-SEND-MODIFIERS
+           WL-KEYBOARD-SEND-REPEAT-INFO
+           WL-TOUCH-INTERFACE
+           WL-TOUCH-IMPLEMENTATION
+           IMPLEMENT-WL-TOUCH
+           WL-TOUCH-SEND-DOWN
+           WL-TOUCH-SEND-UP
+           WL-TOUCH-SEND-MOTION
+           WL-TOUCH-SEND-FRAME
+           WL-TOUCH-SEND-CANCEL
+           WL-OUTPUT-INTERFACE
+           WL-OUTPUT-IMPLEMENTATION
+           IMPLEMENT-WL-OUTPUT
+           WL-OUTPUT-SEND-GEOMETRY
+           WL-OUTPUT-SEND-MODE
+           WL-OUTPUT-SEND-DONE
+           WL-OUTPUT-SEND-SCALE
+           WL-REGION-INTERFACE
+           WL-REGION-IMPLEMENTATION
+           IMPLEMENT-WL-REGION
+           WL-SUBCOMPOSITOR-INTERFACE
+           WL-SUBCOMPOSITOR-IMPLEMENTATION
+           IMPLEMENT-WL-SUBCOMPOSITOR
+           WL-SUBSURFACE-INTERFACE
+           WL-SUBSURFACE-IMPLEMENTATION
+           IMPLEMENT-WL-SUBSURFACE))
+
+(IN-PACKAGE :WAYLAND-SERVER-PROTOCOL)
+
+(DEFINE-FOREIGN-LIBRARY WAYLAND-SERVER (T (:DEFAULT "libwayland-server")))
+
+(USE-FOREIGN-LIBRARY WAYLAND-SERVER)
+
+(DEFPARAMETER WL-DISPLAY-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_display_interface"))
+
+(DEFCSTRUCT WL-DISPLAY-IMPLEMENTATION (SYNC :POINTER) (GET-REGISTRY :POINTER))
+
+(DEFUN IMPLEMENT-WL-DISPLAY (&KEY (SYNC NIL) (GET-REGISTRY NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-DISPLAY-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DISPLAY-IMPLEMENTATION) 'SYNC)
+            (IF SYNC
+                SYNC
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SYNC :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (CALLBACK :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DISPLAY-IMPLEMENTATION) 'GET-REGISTRY)
+            (IF GET-REGISTRY
+                GET-REGISTRY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-REGISTRY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (REGISTRY :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-DISPLAY-SEND-ERROR (RESOURCE OBJECT-ID CODE MESSAGE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :POINTER OBJECT-ID :UINT32 CODE :STRING
+   MESSAGE))
+
+(DEFUN WL-DISPLAY-SEND-DELETE-ID (RESOURCE ID)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 ID))
+
+(DEFPARAMETER WL-REGISTRY-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_registry_interface"))
+
+(DEFCSTRUCT WL-REGISTRY-IMPLEMENTATION (BIND :POINTER))
+
+(DEFUN IMPLEMENT-WL-REGISTRY (&KEY (BIND NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-REGISTRY-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-REGISTRY-IMPLEMENTATION) 'BIND)
+            (IF BIND
+                BIND
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-BIND :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (NAME :UINT32)
+                   (ID :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-REGISTRY-SEND-GLOBAL (RESOURCE NAME INTERFACE VERSION)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 NAME :STRING INTERFACE :UINT32
+   VERSION))
+
+(DEFUN WL-REGISTRY-SEND-GLOBAL-REMOVE (RESOURCE NAME)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 NAME))
+
+(DEFPARAMETER WL-CALLBACK-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_callback_interface"))
+
+(DEFCSTRUCT WL-CALLBACK-IMPLEMENTATION)
+
+(DEFUN IMPLEMENT-WL-CALLBACK (&KEY)
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-CALLBACK-IMPLEMENTATION))))
+    IMPLEMENTATION))
+
+(DEFUN WL-CALLBACK-SEND-DONE (RESOURCE CALLBACK-DATA)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 CALLBACK-DATA))
+
+(DEFPARAMETER WL-COMPOSITOR-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_compositor_interface"))
+
+(DEFCSTRUCT WL-COMPOSITOR-IMPLEMENTATION (CREATE-SURFACE :POINTER)
+ (CREATE-REGION :POINTER))
+
+(DEFUN IMPLEMENT-WL-COMPOSITOR (&KEY (CREATE-SURFACE NIL) (CREATE-REGION NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-COMPOSITOR-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-COMPOSITOR-IMPLEMENTATION) 'CREATE-SURFACE)
+            (IF CREATE-SURFACE
+                CREATE-SURFACE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-CREATE-SURFACE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-COMPOSITOR-IMPLEMENTATION) 'CREATE-REGION)
+            (IF CREATE-REGION
+                CREATE-REGION
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-CREATE-REGION :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFPARAMETER WL-SHM-POOL-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_shm_pool_interface"))
+
+(DEFCSTRUCT WL-SHM-POOL-IMPLEMENTATION (CREATE-BUFFER :POINTER)
+ (DESTROY :POINTER) (RESIZE :POINTER))
+
+(DEFUN IMPLEMENT-WL-SHM-POOL
+       (&KEY (CREATE-BUFFER NIL) (DESTROY NIL) (RESIZE NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-SHM-POOL-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHM-POOL-IMPLEMENTATION) 'CREATE-BUFFER)
+            (IF CREATE-BUFFER
+                CREATE-BUFFER
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-CREATE-BUFFER :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (OFFSET :INT32) (WIDTH :INT32) (HEIGHT :INT32)
+                   (STRIDE :INT32) (FORMAT :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHM-POOL-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHM-POOL-IMPLEMENTATION) 'RESIZE)
+            (IF RESIZE
+                RESIZE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RESIZE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SIZE :INT32))))))
+    IMPLEMENTATION))
+
+(DEFPARAMETER WL-SHM-INTERFACE (FOREIGN-SYMBOL-POINTER "wl_shm_interface"))
+
+(DEFCSTRUCT WL-SHM-IMPLEMENTATION (CREATE-POOL :POINTER))
+
+(DEFUN IMPLEMENT-WL-SHM (&KEY (CREATE-POOL NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-SHM-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-SHM-IMPLEMENTATION)
+           'CREATE-POOL)
+            (IF CREATE-POOL
+                CREATE-POOL
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-CREATE-POOL :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (FD :INT32) (SIZE :INT32))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-SHM-SEND-FORMAT (RESOURCE FORMAT)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 FORMAT))
+
+(DEFPARAMETER WL-BUFFER-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_buffer_interface"))
+
+(DEFCSTRUCT WL-BUFFER-IMPLEMENTATION (DESTROY :POINTER))
+
+(DEFUN IMPLEMENT-WL-BUFFER (&KEY (DESTROY NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-BUFFER-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-BUFFER-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-BUFFER-SEND-RELEASE (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 0))
+
+(DEFPARAMETER WL-DATA-OFFER-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_data_offer_interface"))
+
+(DEFCSTRUCT WL-DATA-OFFER-IMPLEMENTATION (ACCEPT :POINTER) (RECEIVE :POINTER)
+ (DESTROY :POINTER) (FINISH :POINTER) (SET-ACTIONS :POINTER))
+
+(DEFUN IMPLEMENT-WL-DATA-OFFER
+       (
+        &KEY (ACCEPT NIL) (RECEIVE NIL) (DESTROY NIL) (FINISH NIL)
+        (SET-ACTIONS NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-DATA-OFFER-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-OFFER-IMPLEMENTATION) 'ACCEPT)
+            (IF ACCEPT
+                ACCEPT
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-ACCEPT :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SERIAL :UINT32)
+                   (MIME-TYPE :STRING))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-OFFER-IMPLEMENTATION) 'RECEIVE)
+            (IF RECEIVE
+                RECEIVE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RECEIVE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (MIME-TYPE :STRING)
+                   (FD :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-OFFER-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-OFFER-IMPLEMENTATION) 'FINISH)
+            (IF FINISH
+                FINISH
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-FINISH :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-OFFER-IMPLEMENTATION) 'SET-ACTIONS)
+            (IF SET-ACTIONS
+                SET-ACTIONS
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-ACTIONS :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (DND-ACTIONS :UINT32)
+                   (PREFERRED-ACTION :UINT32))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-DATA-OFFER-SEND-OFFER (RESOURCE MIME-TYPE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :STRING MIME-TYPE))
+
+(DEFUN WL-DATA-OFFER-SEND-SOURCE-ACTIONS (RESOURCE SOURCE-ACTIONS)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 SOURCE-ACTIONS))
+
+(DEFUN WL-DATA-OFFER-SEND-ACTION (RESOURCE DND-ACTION)
+  (WL-RESOURCE-POST-EVENT RESOURCE 2 :UINT32 DND-ACTION))
+
+(DEFPARAMETER WL-DATA-SOURCE-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_data_source_interface"))
+
+(DEFCSTRUCT WL-DATA-SOURCE-IMPLEMENTATION (OFFER :POINTER) (DESTROY :POINTER)
+ (SET-ACTIONS :POINTER))
+
+(DEFUN IMPLEMENT-WL-DATA-SOURCE
+       (&KEY (OFFER NIL) (DESTROY NIL) (SET-ACTIONS NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-DATA-SOURCE-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-SOURCE-IMPLEMENTATION) 'OFFER)
+            (IF OFFER
+                OFFER
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-OFFER :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (MIME-TYPE :STRING))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-SOURCE-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-SOURCE-IMPLEMENTATION) 'SET-ACTIONS)
+            (IF SET-ACTIONS
+                SET-ACTIONS
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-ACTIONS :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (DND-ACTIONS :UINT32))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-DATA-SOURCE-SEND-TARGET (RESOURCE MIME-TYPE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :STRING MIME-TYPE))
+
+(DEFUN WL-DATA-SOURCE-SEND-SEND (RESOURCE MIME-TYPE FD)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :STRING MIME-TYPE :INT32 FD))
+
+(DEFUN WL-DATA-SOURCE-SEND-CANCELLED (RESOURCE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 2))
+
+(DEFUN WL-DATA-SOURCE-SEND-DND-DROP-PERFORMED (RESOURCE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 3))
+
+(DEFUN WL-DATA-SOURCE-SEND-DND-FINISHED (RESOURCE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 4))
+
+(DEFUN WL-DATA-SOURCE-SEND-ACTION (RESOURCE DND-ACTION)
+  (WL-RESOURCE-POST-EVENT RESOURCE 5 :UINT32 DND-ACTION))
+
+(DEFPARAMETER WL-DATA-DEVICE-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_data_device_interface"))
+
+(DEFCSTRUCT WL-DATA-DEVICE-IMPLEMENTATION (START-DRAG :POINTER)
+ (SET-SELECTION :POINTER) (RELEASE :POINTER))
+
+(DEFUN IMPLEMENT-WL-DATA-DEVICE
+       (&KEY (START-DRAG NIL) (SET-SELECTION NIL) (RELEASE NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-DATA-DEVICE-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-DEVICE-IMPLEMENTATION) 'START-DRAG)
+            (IF START-DRAG
+                START-DRAG
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-START-DRAG :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SOURCE :POINTER)
+                   (ORIGIN :POINTER) (ICON :POINTER) (SERIAL :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-DEVICE-IMPLEMENTATION) 'SET-SELECTION)
+            (IF SET-SELECTION
+                SET-SELECTION
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-SELECTION :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SOURCE :POINTER)
+                   (SERIAL :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-DEVICE-IMPLEMENTATION) 'RELEASE)
+            (IF RELEASE
+                RELEASE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RELEASE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-DATA-DEVICE-SEND-DATA-OFFER (RESOURCE ID)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :POINTER ID))
+
+(DEFUN WL-DATA-DEVICE-SEND-ENTER (RESOURCE SERIAL SURFACE X Y ID)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 SERIAL :POINTER SURFACE :INT32 X
+   :INT32 Y :POINTER ID))
+
+(DEFUN WL-DATA-DEVICE-SEND-LEAVE (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 2))
+
+(DEFUN WL-DATA-DEVICE-SEND-MOTION (RESOURCE TIME X Y)
+  (WL-RESOURCE-POST-EVENT RESOURCE 3 :UINT32 TIME :INT32 X :INT32 Y))
+
+(DEFUN WL-DATA-DEVICE-SEND-DROP (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 4))
+
+(DEFUN WL-DATA-DEVICE-SEND-SELECTION (RESOURCE ID)
+  (WL-RESOURCE-POST-EVENT RESOURCE 5 :POINTER ID))
+
+(DEFPARAMETER WL-DATA-DEVICE-MANAGER-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_data_device_manager_interface"))
+
+(DEFCSTRUCT WL-DATA-DEVICE-MANAGER-IMPLEMENTATION (CREATE-DATA-SOURCE :POINTER)
+ (GET-DATA-DEVICE :POINTER))
+
+(DEFUN IMPLEMENT-WL-DATA-DEVICE-MANAGER
+       (&KEY (CREATE-DATA-SOURCE NIL) (GET-DATA-DEVICE NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-DATA-DEVICE-MANAGER-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-DEVICE-MANAGER-IMPLEMENTATION)
+           'CREATE-DATA-SOURCE)
+            (IF CREATE-DATA-SOURCE
+                CREATE-DATA-SOURCE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-CREATE-DATA-SOURCE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-DATA-DEVICE-MANAGER-IMPLEMENTATION) 'GET-DATA-DEVICE)
+            (IF GET-DATA-DEVICE
+                GET-DATA-DEVICE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-DATA-DEVICE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (SEAT :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFPARAMETER WL-SHELL-INTERFACE (FOREIGN-SYMBOL-POINTER "wl_shell_interface"))
+
+(DEFCSTRUCT WL-SHELL-IMPLEMENTATION (GET-SHELL-SURFACE :POINTER))
+
+(DEFUN IMPLEMENT-WL-SHELL (&KEY (GET-SHELL-SURFACE NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-SHELL-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-SHELL-IMPLEMENTATION)
+           'GET-SHELL-SURFACE)
+            (IF GET-SHELL-SURFACE
+                GET-SHELL-SURFACE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-SHELL-SURFACE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (SURFACE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFPARAMETER WL-SHELL-SURFACE-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_shell_surface_interface"))
+
+(DEFCSTRUCT WL-SHELL-SURFACE-IMPLEMENTATION (PONG :POINTER) (MOVE :POINTER)
+ (RESIZE :POINTER) (SET-TOPLEVEL :POINTER) (SET-TRANSIENT :POINTER)
+ (SET-FULLSCREEN :POINTER) (SET-POPUP :POINTER) (SET-MAXIMIZED :POINTER)
+ (SET-TITLE :POINTER) (SET-CLASS :POINTER))
+
+(DEFUN IMPLEMENT-WL-SHELL-SURFACE
+       (
+        &KEY (PONG NIL) (MOVE NIL) (RESIZE NIL) (SET-TOPLEVEL NIL)
+        (SET-TRANSIENT NIL) (SET-FULLSCREEN NIL) (SET-POPUP NIL)
+        (SET-MAXIMIZED NIL) (SET-TITLE NIL) (SET-CLASS NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'PONG)
+            (IF PONG
+                PONG
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-PONG :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SERIAL :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'MOVE)
+            (IF MOVE
+                MOVE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-MOVE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'RESIZE)
+            (IF RESIZE
+                RESIZE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RESIZE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32) (EDGES :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-TOPLEVEL)
+            (IF SET-TOPLEVEL
+                SET-TOPLEVEL
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-TOPLEVEL :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-TRANSIENT)
+            (IF SET-TRANSIENT
+                SET-TRANSIENT
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-TRANSIENT :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (PARENT :POINTER)
+                   (X :INT32) (Y :INT32) (FLAGS :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-FULLSCREEN)
+            (IF SET-FULLSCREEN
+                SET-FULLSCREEN
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-FULLSCREEN :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (METHOD :UINT32)
+                   (FRAMERATE :UINT32) (OUTPUT :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-POPUP)
+            (IF SET-POPUP
+                SET-POPUP
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-POPUP :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SEAT :POINTER)
+                   (SERIAL :UINT32) (PARENT :POINTER) (X :INT32) (Y :INT32)
+                   (FLAGS :UINT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-MAXIMIZED)
+            (IF SET-MAXIMIZED
+                SET-MAXIMIZED
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-MAXIMIZED :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (OUTPUT :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-TITLE)
+            (IF SET-TITLE
+                SET-TITLE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-TITLE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (TITLE :STRING))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SHELL-SURFACE-IMPLEMENTATION) 'SET-CLASS)
+            (IF SET-CLASS
+                SET-CLASS
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-CLASS :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (CLASS- :STRING))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-SHELL-SURFACE-SEND-PING (RESOURCE SERIAL)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 SERIAL))
+
+(DEFUN WL-SHELL-SURFACE-SEND-CONFIGURE (RESOURCE EDGES WIDTH HEIGHT)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 EDGES :INT32 WIDTH :INT32 HEIGHT))
+
+(DEFUN WL-SHELL-SURFACE-SEND-POPUP-DONE (RESOURCE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 2))
+
+(DEFPARAMETER WL-SURFACE-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_surface_interface"))
+
+(DEFCSTRUCT WL-SURFACE-IMPLEMENTATION (DESTROY :POINTER) (ATTACH :POINTER)
+ (DAMAGE :POINTER) (FRAME :POINTER) (SET-OPAQUE-REGION :POINTER)
+ (SET-INPUT-REGION :POINTER) (COMMIT :POINTER) (SET-BUFFER-TRANSFORM :POINTER)
+ (SET-BUFFER-SCALE :POINTER) (DAMAGE-BUFFER :POINTER))
+
+(DEFUN IMPLEMENT-WL-SURFACE
+       (
+        &KEY (DESTROY NIL) (ATTACH NIL) (DAMAGE NIL) (FRAME NIL)
+        (SET-OPAQUE-REGION NIL) (SET-INPUT-REGION NIL) (COMMIT NIL)
+        (SET-BUFFER-TRANSFORM NIL) (SET-BUFFER-SCALE NIL) (DAMAGE-BUFFER NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-SURFACE-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'ATTACH)
+            (IF ATTACH
+                ATTACH
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-ATTACH :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (BUFFER :POINTER)
+                   (X :INT32) (Y :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'DAMAGE)
+            (IF DAMAGE
+                DAMAGE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DAMAGE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (X :INT32) (Y :INT32)
+                   (WIDTH :INT32) (HEIGHT :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'FRAME)
+            (IF FRAME
+                FRAME
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-FRAME :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (CALLBACK :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'SET-OPAQUE-REGION)
+            (IF SET-OPAQUE-REGION
+                SET-OPAQUE-REGION
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-OPAQUE-REGION :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (REGION :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'SET-INPUT-REGION)
+            (IF SET-INPUT-REGION
+                SET-INPUT-REGION
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-INPUT-REGION :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (REGION :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'COMMIT)
+            (IF COMMIT
+                COMMIT
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-COMMIT :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'SET-BUFFER-TRANSFORM)
+            (IF SET-BUFFER-TRANSFORM
+                SET-BUFFER-TRANSFORM
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-BUFFER-TRANSFORM :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (TRANSFORM :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'SET-BUFFER-SCALE)
+            (IF SET-BUFFER-SCALE
+                SET-BUFFER-SCALE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-BUFFER-SCALE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SCALE :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SURFACE-IMPLEMENTATION) 'DAMAGE-BUFFER)
+            (IF DAMAGE-BUFFER
+                DAMAGE-BUFFER
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DAMAGE-BUFFER :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (X :INT32) (Y :INT32)
+                   (WIDTH :INT32) (HEIGHT :INT32))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-SURFACE-SEND-ENTER (RESOURCE OUTPUT)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :POINTER OUTPUT))
+
+(DEFUN WL-SURFACE-SEND-LEAVE (RESOURCE OUTPUT)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :POINTER OUTPUT))
+
+(DEFPARAMETER WL-SEAT-INTERFACE (FOREIGN-SYMBOL-POINTER "wl_seat_interface"))
+
+(DEFCSTRUCT WL-SEAT-IMPLEMENTATION (GET-POINTER :POINTER)
+ (GET-KEYBOARD :POINTER) (GET-TOUCH :POINTER) (RELEASE :POINTER))
+
+(DEFUN IMPLEMENT-WL-SEAT
+       (
+        &KEY (GET-POINTER NIL) (GET-KEYBOARD NIL) (GET-TOUCH NIL)
+        (RELEASE NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-SEAT-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-SEAT-IMPLEMENTATION)
+           'GET-POINTER)
+            (IF GET-POINTER
+                GET-POINTER
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-POINTER :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-SEAT-IMPLEMENTATION)
+           'GET-KEYBOARD)
+            (IF GET-KEYBOARD
+                GET-KEYBOARD
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-KEYBOARD :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-SEAT-IMPLEMENTATION)
+           'GET-TOUCH)
+            (IF GET-TOUCH
+                GET-TOUCH
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-TOUCH :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-SEAT-IMPLEMENTATION)
+           'RELEASE)
+            (IF RELEASE
+                RELEASE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RELEASE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-SEAT-SEND-CAPABILITIES (RESOURCE CAPABILITIES)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 CAPABILITIES))
+
+(DEFUN WL-SEAT-SEND-NAME (RESOURCE NAME)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :STRING NAME))
+
+(DEFPARAMETER WL-POINTER-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_pointer_interface"))
+
+(DEFCSTRUCT WL-POINTER-IMPLEMENTATION (SET-CURSOR :POINTER) (RELEASE :POINTER))
+
+(DEFUN IMPLEMENT-WL-POINTER (&KEY (SET-CURSOR NIL) (RELEASE NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-POINTER-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-POINTER-IMPLEMENTATION) 'SET-CURSOR)
+            (IF SET-CURSOR
+                SET-CURSOR
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-CURSOR :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (SERIAL :UINT32)
+                   (SURFACE :POINTER) (HOTSPOT-X :INT32)
+                   (HOTSPOT-Y :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-POINTER-IMPLEMENTATION) 'RELEASE)
+            (IF RELEASE
+                RELEASE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RELEASE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-POINTER-SEND-ENTER (RESOURCE SERIAL SURFACE SURFACE-X SURFACE-Y)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 SERIAL :POINTER SURFACE :INT32
+   SURFACE-X :INT32 SURFACE-Y))
+
+(DEFUN WL-POINTER-SEND-LEAVE (RESOURCE SERIAL SURFACE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 SERIAL :POINTER SURFACE))
+
+(DEFUN WL-POINTER-SEND-MOTION (RESOURCE TIME SURFACE-X SURFACE-Y)
+  (WL-RESOURCE-POST-EVENT RESOURCE 2 :UINT32 TIME :INT32 SURFACE-X :INT32
+   SURFACE-Y))
+
+(DEFUN WL-POINTER-SEND-BUTTON (RESOURCE SERIAL TIME BUTTON STATE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 3 :UINT32 SERIAL :UINT32 TIME :UINT32 BUTTON
+   :UINT32 STATE))
+
+(DEFUN WL-POINTER-SEND-AXIS (RESOURCE TIME AXIS VALUE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 4 :UINT32 TIME :UINT32 AXIS :INT32 VALUE))
+
+(DEFUN WL-POINTER-SEND-FRAME (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 5))
+
+(DEFUN WL-POINTER-SEND-AXIS-SOURCE (RESOURCE AXIS-SOURCE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 6 :UINT32 AXIS-SOURCE))
+
+(DEFUN WL-POINTER-SEND-AXIS-STOP (RESOURCE TIME AXIS)
+  (WL-RESOURCE-POST-EVENT RESOURCE 7 :UINT32 TIME :UINT32 AXIS))
+
+(DEFUN WL-POINTER-SEND-AXIS-DISCRETE (RESOURCE AXIS DISCRETE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 8 :UINT32 AXIS :INT32 DISCRETE))
+
+(DEFPARAMETER WL-KEYBOARD-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_keyboard_interface"))
+
+(DEFCSTRUCT WL-KEYBOARD-IMPLEMENTATION (RELEASE :POINTER))
+
+(DEFUN IMPLEMENT-WL-KEYBOARD (&KEY (RELEASE NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-KEYBOARD-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-KEYBOARD-IMPLEMENTATION) 'RELEASE)
+            (IF RELEASE
+                RELEASE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RELEASE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-KEYBOARD-SEND-KEYMAP (RESOURCE FORMAT FD SIZE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 FORMAT :INT32 FD :UINT32 SIZE))
+
+(DEFUN WL-KEYBOARD-SEND-ENTER (RESOURCE SERIAL SURFACE KEYS)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 SERIAL :POINTER SURFACE :POINTER
+   KEYS))
+
+(DEFUN WL-KEYBOARD-SEND-LEAVE (RESOURCE SERIAL SURFACE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 2 :UINT32 SERIAL :POINTER SURFACE))
+
+(DEFUN WL-KEYBOARD-SEND-KEY (RESOURCE SERIAL TIME KEY STATE)
+  (WL-RESOURCE-POST-EVENT RESOURCE 3 :UINT32 SERIAL :UINT32 TIME :UINT32 KEY
+   :UINT32 STATE))
+
+(DEFUN WL-KEYBOARD-SEND-MODIFIERS
+       (RESOURCE SERIAL MODS-DEPRESSED MODS-LATCHED MODS-LOCKED GROUP)
+  (WL-RESOURCE-POST-EVENT RESOURCE 4 :UINT32 SERIAL :UINT32 MODS-DEPRESSED
+   :UINT32 MODS-LATCHED :UINT32 MODS-LOCKED :UINT32 GROUP))
+
+(DEFUN WL-KEYBOARD-SEND-REPEAT-INFO (RESOURCE RATE DELAY)
+  (WL-RESOURCE-POST-EVENT RESOURCE 5 :INT32 RATE :INT32 DELAY))
+
+(DEFPARAMETER WL-TOUCH-INTERFACE (FOREIGN-SYMBOL-POINTER "wl_touch_interface"))
+
+(DEFCSTRUCT WL-TOUCH-IMPLEMENTATION (RELEASE :POINTER))
+
+(DEFUN IMPLEMENT-WL-TOUCH (&KEY (RELEASE NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-TOUCH-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION '(:STRUCT WL-TOUCH-IMPLEMENTATION)
+           'RELEASE)
+            (IF RELEASE
+                RELEASE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-RELEASE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFUN WL-TOUCH-SEND-DOWN (RESOURCE SERIAL TIME SURFACE ID X Y)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :UINT32 SERIAL :UINT32 TIME :POINTER
+   SURFACE :INT32 ID :INT32 X :INT32 Y))
+
+(DEFUN WL-TOUCH-SEND-UP (RESOURCE SERIAL TIME ID)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 SERIAL :UINT32 TIME :INT32 ID))
+
+(DEFUN WL-TOUCH-SEND-MOTION (RESOURCE TIME ID X Y)
+  (WL-RESOURCE-POST-EVENT RESOURCE 2 :UINT32 TIME :INT32 ID :INT32 X :INT32 Y))
+
+(DEFUN WL-TOUCH-SEND-FRAME (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 3))
+
+(DEFUN WL-TOUCH-SEND-CANCEL (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 4))
+
+(DEFPARAMETER WL-OUTPUT-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_output_interface"))
+
+(DEFCSTRUCT WL-OUTPUT-IMPLEMENTATION)
+
+(DEFUN IMPLEMENT-WL-OUTPUT (&KEY)
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-OUTPUT-IMPLEMENTATION))))
+    IMPLEMENTATION))
+
+(DEFUN WL-OUTPUT-SEND-GEOMETRY
+       (RESOURCE X Y PHYSICAL-WIDTH PHYSICAL-HEIGHT SUBPIXEL MAKE MODEL
+        TRANSFORM)
+  (WL-RESOURCE-POST-EVENT RESOURCE 0 :INT32 X :INT32 Y :INT32 PHYSICAL-WIDTH
+   :INT32 PHYSICAL-HEIGHT :INT32 SUBPIXEL :STRING MAKE :STRING MODEL :INT32
+   TRANSFORM))
+
+(DEFUN WL-OUTPUT-SEND-MODE (RESOURCE FLAGS WIDTH HEIGHT REFRESH)
+  (WL-RESOURCE-POST-EVENT RESOURCE 1 :UINT32 FLAGS :INT32 WIDTH :INT32 HEIGHT
+   :INT32 REFRESH))
+
+(DEFUN WL-OUTPUT-SEND-DONE (RESOURCE) (WL-RESOURCE-POST-EVENT RESOURCE 2))
+
+(DEFUN WL-OUTPUT-SEND-SCALE (RESOURCE FACTOR)
+  (WL-RESOURCE-POST-EVENT RESOURCE 3 :INT32 FACTOR))
+
+(DEFPARAMETER WL-REGION-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_region_interface"))
+
+(DEFCSTRUCT WL-REGION-IMPLEMENTATION (DESTROY :POINTER) (ADD :POINTER)
+ (SUBTRACT :POINTER))
+
+(DEFUN IMPLEMENT-WL-REGION (&KEY (DESTROY NIL) (ADD NIL) (SUBTRACT NIL))
+  (LET ((IMPLEMENTATION (FOREIGN-ALLOC '(:STRUCT WL-REGION-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-REGION-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-REGION-IMPLEMENTATION) 'ADD)
+            (IF ADD
+                ADD
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-ADD :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (X :INT32) (Y :INT32)
+                   (WIDTH :INT32) (HEIGHT :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-REGION-IMPLEMENTATION) 'SUBTRACT)
+            (IF SUBTRACT
+                SUBTRACT
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SUBTRACT :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (X :INT32) (Y :INT32)
+                   (WIDTH :INT32) (HEIGHT :INT32))))))
+    IMPLEMENTATION))
+
+(DEFPARAMETER WL-SUBCOMPOSITOR-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_subcompositor_interface"))
+
+(DEFCSTRUCT WL-SUBCOMPOSITOR-IMPLEMENTATION (DESTROY :POINTER)
+ (GET-SUBSURFACE :POINTER))
+
+(DEFUN IMPLEMENT-WL-SUBCOMPOSITOR (&KEY (DESTROY NIL) (GET-SUBSURFACE NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-SUBCOMPOSITOR-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBCOMPOSITOR-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBCOMPOSITOR-IMPLEMENTATION) 'GET-SUBSURFACE)
+            (IF GET-SUBSURFACE
+                GET-SUBSURFACE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-GET-SUBSURFACE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (ID :POINTER)
+                   (SURFACE :POINTER) (PARENT :POINTER))))))
+    IMPLEMENTATION))
+
+(DEFPARAMETER WL-SUBSURFACE-INTERFACE
+  (FOREIGN-SYMBOL-POINTER "wl_subsurface_interface"))
+
+(DEFCSTRUCT WL-SUBSURFACE-IMPLEMENTATION (DESTROY :POINTER)
+ (SET-POSITION :POINTER) (PLACE-ABOVE :POINTER) (PLACE-BELOW :POINTER)
+ (SET-SYNC :POINTER) (SET-DESYNC :POINTER))
+
+(DEFUN IMPLEMENT-WL-SUBSURFACE
+       (
+        &KEY (DESTROY NIL) (SET-POSITION NIL) (PLACE-ABOVE NIL)
+        (PLACE-BELOW NIL) (SET-SYNC NIL) (SET-DESYNC NIL))
+  (LET ((IMPLEMENTATION
+         (FOREIGN-ALLOC '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION) 'DESTROY)
+            (IF DESTROY
+                DESTROY
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-DESTROY :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION) 'SET-POSITION)
+            (IF SET-POSITION
+                SET-POSITION
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-POSITION :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER) (X :INT32)
+                   (Y :INT32))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION) 'PLACE-ABOVE)
+            (IF PLACE-ABOVE
+                PLACE-ABOVE
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-PLACE-ABOVE :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (SIBLING :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION) 'PLACE-BELOW)
+            (IF PLACE-BELOW
+                PLACE-BELOW
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-PLACE-BELOW :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER)
+                   (SIBLING :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION) 'SET-SYNC)
+            (IF SET-SYNC
+                SET-SYNC
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-SYNC :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    (SETF (FOREIGN-SLOT-VALUE IMPLEMENTATION
+           '(:STRUCT WL-SUBSURFACE-IMPLEMENTATION) 'SET-DESYNC)
+            (IF SET-DESYNC
+                SET-DESYNC
+                (GET-CALLBACK
+                 (DEFCALLBACK EMPTY-SET-DESYNC :VOID
+                  ((CLIENT :POINTER) (RESOURCE :POINTER))))))
+    IMPLEMENTATION))
 
