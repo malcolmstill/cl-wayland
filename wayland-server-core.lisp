@@ -15,6 +15,7 @@
    wl-client-destroy
    wl-client-flush
    wl-client-get-credentials
+   pid-of-client
    wl-client-get-destroy-listener
    wl-client-get-fd
    wl-client-get-object
@@ -246,6 +247,11 @@
   (pid :pointer)
   (uid :pointer)
   (gid :pointer))
+
+(defun pid-of-client (client-ptr)
+  (with-foreign-objects ((pid :int) (uid :int) (gid :int))
+    (wl-client-get-credentials client-ptr pid uid gid)
+    (mem-aref pid :int)))
 
 (defcfun "wl_client_get_fd" :int32
   (client :pointer))

@@ -368,8 +368,7 @@
 		  (in-package ,package-keyword)
 		  
 		  ,@(when path-to-lib
-		      `(
-			,(if (rest path-to-lib)
+		      `(,(if (rest path-to-lib)
 			    `(define-foreign-library ,package
 				(:unix (:or ,@(rest path-to-lib)))
 				(t (:default ,(first path-to-lib))))
@@ -399,5 +398,3 @@
 	 :do (format s "~S~%~%" sexp))
       (loop :for sexp :in code
 	 :do (format s "~S~%~%" sexp)))))
-
-
