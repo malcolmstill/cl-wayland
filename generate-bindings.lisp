@@ -1,6 +1,6 @@
 ;;
 ;;
-;; (generate-bindings nil 'wayland-server "/usr/share/wayland/wayland.xml" :path-to-lib '("libwayland-server" "/usr/lib64/libwayland-server"))
+;; (generate-bindings nil 'wayland-server "/usr/share/wayland/wayland.xml" :path-to-lib '("libwayland-server"))
 ;; (generate-bindings nil 'xdg-shell-server "xdg-shell.xml" :dependencies (list :wayland-server-protocol) :generate-interfaces t)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -99,10 +99,12 @@
 (defun lisp-name (&rest rest)
   (intern (underscore-to-hyphen (apply #'concatenate 'string rest))))
 
+#|
 (defun export-lisp-name (&rest rest)
   (let ((symbol (intern (underscore-to-hyphen (apply #'concatenate 'string rest)))))
     (add-to-symbols symbol)
     symbol))
+|#
 
 (defun lisp-name-keyword (&rest rest)
   (intern (underscore-to-hyphen (apply #'concatenate 'string rest)) :keyword))
@@ -182,15 +184,19 @@
 	      `(,(lisp-name name) ,(lisp-name-keyword (type-lookup arg-type)))))
 	  args))
 
-(defun generate-empty-callback (roe)
+(defun generate-get-empty-callback (interface-name roe)
   (with-slots (name args) roe
-    (let ((callback-name (lisp-name "EMPTY-" name)))
-      `(get-callback
-	(defcallback ,callback-name :void
-	    ((client :pointer) (resource :pointer)
-	     ,@(generate-callback-args args)))))))
+    (let ((callback-name (lisp-name "EMPTY-" interface-name "-" name)))
+      `(get-callback ',callback-name))))
 
-(defun generate-implementation-setfs (implementation implement-name roe)
+(defun generate-empty-callback (interface-name roe)
+  (with-slots (name args) roe
+    (let ((callback-name (lisp-name "EMPTY-" interface-name "-" name)))
+      `(defcallback ,callback-name :void
+	 ((client :pointer) (resource :pointer)
+	  ,@(generate-callback-args args))))))
+
+(defun generate-implementation-setfs (interface-name implementation implement-name roe)
   (with-slots (name args) roe
     (let ((roe-name (lisp-name name)))
       `(setf (foreign-slot-value ,implementation
@@ -198,7 +204,7 @@
 				',roe-name)
 	    (if ,roe-name
 		,roe-name
-		,(generate-empty-callback roe))))))
+		,(generate-get-empty-callback interface-name roe))))))
 
 (defun generate-optional-arg (roe)
   (with-slots (name) roe
@@ -216,11 +222,16 @@
 	  (implement-func-args (mapcar #'generate-optional-arg roes)))
       `((defcstruct ,implement-name
 	    ,@(mapcar #'generate-struct-entry roes))
+
+	,@(mapcar (lambda (roe)
+		    (generate-empty-callback name roe))
+		  roes)
 	
 	(defun ,implement-func (&key ,@implement-func-args)
 	  (let ((implementation (foreign-alloc '(:struct ,implement-name))))
 	    ,@(mapcar (lambda (roe)
-			(generate-implementation-setfs 'implementation
+			(generate-implementation-setfs name
+						       'implementation
 						       implement-name
 						       roe))
 		      roes)
