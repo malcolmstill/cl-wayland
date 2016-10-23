@@ -1,7 +1,7 @@
 ;;
 ;;
 ;; (generate-bindings nil 'wayland-server "/usr/share/wayland/wayland.xml" :path-to-lib '("libwayland-server"))
-;; (generate-bindings nil 'xdg-shell-server "xdg-shell.xml" :dependencies (list :wayland-server-protocol) :generate-interfaces t)
+;; (generate-bindings nil 'xdg-shell-server "xdg-shell.xml" :dependencies (list :wayland-server-protocol) :generate-interfaces? t)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (asdf:oos 'asdf:load-op :xmls)
@@ -288,16 +288,19 @@
 (defun generate-client-protocol (interfaces)
   (apply #'append (mapcar #'generate-client-side interfaces)))
 
-(defun generate-interface (interface)
+(defun generate-setf-interface (generate-interfaces? interface)
   (with-slots (name version requests events) interface
     (let ((interface-name (lisp-name (name interface) "-INTERFACE")))
-      `(setf ,interface-name (make-wl-interface
-			      ,name
-			      ,version
-			      ,(length requests)
-			      (null-pointer)
-			      ,(length events)
-			      (null-pointer))))))
+      (if generate-interfaces?
+	  `(setf ,interface-name (make-wl-interface
+				  ,name
+				  ,version
+				  ,(length requests)
+				  (null-pointer)
+				  ,(length events)
+				  (null-pointer)))
+	  `(setf ,interface-name
+		 (foreign-symbol-pointer ,(concatenate 'string name "_interface")))))))
 
 (defun replace-type (interfaces)
   (mapcar (lambda (interface)
@@ -346,24 +349,32 @@
       (set-events ,interface-name
 		  ,(generate-message (events interface) types)))))
 
-(defun generate-interfaces (protocol interfaces)
-  (let ((name (lisp-name "MAKE-" (symbol-name protocol) "-INTERFACES"))
+(defun generate-interface-init (generate-interfaces? protocol interfaces)
+  (let ((name (lisp-name "INITIALIZE-" (symbol-name protocol) "-INTERFACES"))
 	(types-name (lisp-name (symbol-name protocol) "-TYPES")))
-    (setf *offset* 1)
-    `((defparameter ,types-name nil)
-       
-      (defun ,name ()
-	,@(mapcar #'generate-interface interfaces)
-
-	(setf ,types-name
-	      (make-wl-types
-	       (null-pointer)
-	       ,@(apply #'append (mapcar #'interfaces-of-interface interfaces))))
-
-	,@(apply #'append
-		 (mapcar (lambda (interface)
-			   (set-requests-and-events interface types-name))
-			 interfaces))))))
+    (if generate-interfaces?
+	(progn
+	  (setf *offset* 1)
+	  `((defparameter ,types-name nil)
+	    
+	    (defun ,name ()
+	      ,@(mapcar (lambda (interface)
+			  (generate-setf-interface generate-interfaces? interface))
+			interfaces)
+	      
+	      (setf ,types-name
+		    (make-wl-types
+		     (null-pointer)
+		     ,@(apply #'append (mapcar #'interfaces-of-interface interfaces))))
+	      
+	      ,@(apply #'append
+		       (mapcar (lambda (interface)
+				 (set-requests-and-events interface types-name))
+			       interfaces)))))
+	`((defun ,name ()
+	    ,@(mapcar (lambda (interface)
+			(generate-setf-interface generate-interfaces? interface))
+			interfaces))))))
 
 ;; 
 
@@ -391,18 +402,16 @@
 ;; If we don't have a lib that exports the interface objects
 ;; we have to build them 
 
-(defun generate-bindings (client? package xml-file &key (path-to-lib nil) (generate-interfaces nil) (dependencies nil))
-  (setf *generate-interfaces* generate-interfaces)
-  (when (and path-to-lib generate-interfaces)
+(defun generate-bindings (client? package xml-file &key (path-to-lib nil) (generate-interfaces? nil) (dependencies nil))
+  (setf *generate-interfaces* generate-interfaces?)
+  (when (and path-to-lib generate-interfaces?)
     (error "Can't provide path-to-lib and generate-interfaces as true"))
   (let* ((protocol.xml (read-wayland-xml xml-file))
 	 (protocol (read-protocol protocol.xml))
-	 (code (if client?
-		   (generate-client-protocol protocol)
-		   (generate-server-protocol protocol)))
-	 (code (if generate-interfaces
-		   (append code (generate-interfaces package protocol))
-		   code))
+	 (code (append (if client?
+			   (generate-client-protocol protocol)
+			   (generate-server-protocol protocol))
+		       (generate-interface-init generate-interfaces? package protocol)))
 	 (symbols (mapcar #'second code)))
     (with-open-file (s (concatenate 'string (string-downcase (symbol-name package)) "-protocol.lisp") :direction :output :if-exists :supersede :if-does-not-exist :create)
       (loop :for sexp :in (preamble package symbols path-to-lib dependencies)
