@@ -65,6 +65,8 @@
    wl-resource-post-event
    wl-resource-get-user-data
    wl-resource-get-version
+   wl-resource-instance-of
+   wl-resource-get-id
    wl-shm-buffer-begin-access
    wl-shm-buffer-end-access
    wl-shm-buffer-get
@@ -362,6 +364,17 @@
   (resource :pointer))
 
 (defcfun "wl_resource_get_version" :int
+  (resource :pointer))
+
+(defcfun ("wl_resource_instance_of" %wl-resource-instance-of) :int
+  (resource :pointer)
+  (interface :pointer)
+  (implementation :pointer))
+
+(defun wl-resource-instance-of (resource interface implementation)
+  (not (zerop (%wl-resource-instance-of resource interface implementation))))
+
+(defcfun "wl_resource_get_id" :uint32
   (resource :pointer))
 
 ;; Shared memory (SHM) functions
