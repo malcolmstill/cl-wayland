@@ -5,6 +5,19 @@
 (defpackage :waylisp
   (:use :common-lisp :cffi :wayland-server-core :wayland-server-protocol :xdg-shell-server-protocol :zxdg-shell-server-protocol)
   (:export
+   wl-resource
+   with-wl-array
+   defimplementation
+   def-wl-callback
+   def-wl-bind
+   def-wl-delete
+   resources
+   keyboard
+   pointer
+   ->resource
+   find-resource
+   get-version
+   isurface
    wl-rect
    wl-region
    wl-client
@@ -31,6 +44,12 @@
    y
    width
    height
+   origin-x
+   origin-y
+   scale-x
+   scale-y
+   effects
+   opacity
    operation
    ->region
    rects
@@ -64,6 +83,100 @@
 (defparameter *clients* nil)
 (defparameter *surfaces* nil) ;; List of all Wayland surfaces
 
+#|
+Time for some macro fu. This will greatly simplify the plumbing code.
+|#
+
+(defclass wl-client ()
+  ((->client :accessor ->client :initarg :->client :initform nil)
+   (regions :accessor regions :initarg :regions :initform nil)
+   (resources :accessor resources :initargs :resources :initform nil)
+   (pointer :accessor pointer :initarg :pointer :initform nil)
+   (keyboard :accessor keyboard :initarg :keyboard :initform nil)))
+
+(defun get-client (client-ptr)
+  (let ((client (find-if (lambda (client)
+			   (cffi:pointer-eq (->client client) client-ptr))
+			 *clients*)))
+    (if client
+	client
+	(let ((new-client (make-instance 'wl-client :->client client-ptr)))
+	  (push new-client *clients*)
+	  new-client))))
+
+(defclass wl-resource ()
+  ((->resource :accessor ->resource :initarg :->resource :initform nil)
+   (client :accessor client :initarg :client :initform nil)))
+
+(defmethod get-version ((resource wl-resource))
+  (wl-resource-get-version (->resource resource)))
+
+(defmacro def-wl-callback (name (client resource &rest args) &body body)
+  (let ((client-ptr (gensym "client-ptr"))
+	(resource-ptr (gensym "resource-ptr")))
+    `(cffi:defcallback ,name :void ((,client-ptr :pointer) (,resource-ptr :pointer) ,@args)
+       (let* ((,client (get-client ,client-ptr))
+	      (,resource (find-resource ,client (wl-resource-get-user-data ,resource-ptr))))
+	 ,@body))))
+
+(defmacro def-wl-bind (name (client &rest args) &body body)
+  (let ((client-ptr (gensym "client-ptr")))
+    `(cffi:defcallback ,name :void ((,client-ptr :pointer) ,@args)
+       (let* ((,client (get-client ,client-ptr)))
+	 ,@body))))
+
+(defmacro def-wl-delete (name (resource) &body body)
+  (let ((resource-ptr (gensym "resource-ptr")))
+    `(cffi:defcallback ,name :void ((,resource-ptr :pointer))
+       (let* ((,resource (find-resource-all ,resource-ptr)))
+	 ,@body))))
+
+(defun find-resource (client ->resource)
+  (find-if (lambda (resource)
+	     (cffi:pointer-eq (->resource resource) ->resource))
+	   (resources client)))
+
+(defun find-resource-all (->resource)
+  (loop :for client :in *clients*
+     :do (let ((r (find-resource client ->resource)))
+	   (when r
+	     (return-from find-resource-all r)))))
+
+(cffi:defcallback empty-delete-function :void ((resource :pointer))
+    )
+
+(defmacro defimplementation (name (&rest superclasses) (&rest impls) (&rest slots))
+  (let ((impl (intern (concatenate 'string (string-upcase (symbol-name name)) "-IMPLEMENTATION")))
+	(iface (intern (concatenate 'string (string-upcase (symbol-name name)) "-INTERFACE")))
+	(impl-fn (intern (concatenate 'string "IMPLEMENT-" (string-upcase (symbol-name name)))))
+	(make-fn (intern (concatenate 'string "MAKE-" (string-upcase (symbol-name name))))))
+    `(progn
+       (defparameter ,impl nil)
+       (defclass ,name (wl-resource ,@superclasses)
+	 (,@slots))
+       (defun ,make-fn (client version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)))
+	 (when (not ,impl)
+	   (setf ,impl (,impl-fn
+			,@(apply #'concatenate 'list (mapcar (lambda (x)
+							       `(,(first x) (cffi:callback ,(second x))))
+							     impls)))))
+	 (if supplied
+	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :resource resource :delete delete-fn)
+	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :delete delete-fn))))))
+
+(defmethod initialize-instance :before ((resource wl-resource) &key client version id implementation interface (data (cffi:null-pointer) supplied) delete)
+  (let* ((->client (->client client))
+	 (->resource (wl-resource-create ->client interface version id)))
+    (setf (->resource resource) ->resource)
+    (wl-resource-set-implementation ->resource
+				    implementation
+				    (if supplied
+					data
+					->resource)
+				    delete)
+    (setf (client resource) client)
+    (push resource (resources client))))
+
 (defclass wl-rect ()
   ((x :accessor x :initarg :x :initform 0)
    (y :accessor y :initarg :y :initform 0)
@@ -75,21 +188,19 @@
   ((->region :accessor ->region :initarg :->region :initform nil)
    (rects :accessor rects :initarg :rects :initform nil)))
 
-(defclass wl-client ()
-  ((->client :accessor ->client :initarg :->client :initform nil)
-   (regions :accessor regions :initarg :regions :initform nil)
-   (->pointer :accessor ->pointer :initarg :->pointer :initform nil)
-   (->keyboard :accessor ->keyboard :initarg :->keyboard :initform nil)))
-
-(defun get-client (client-ptr)
-  (let ((client (find-if (lambda (client)
-			   (pointer-eq (->client client) client-ptr))
-			 *clients*)))
-    (if client
-	client
-	(let ((new-client (make-instance 'wl-client :->client client-ptr)))
-	  (push new-client *clients*)
-	  new-client))))
+(defclass isurface ()
+  ((x :accessor x :initarg :x :initform 0.0)
+   (y :accessor y :initarg :y :initform 0.0)
+   (width :accessor width :initarg :width :initform 0.0)
+   (height :accessor height :initarg :height :initform 0.0)
+   (opacity :accessor opacity :initarg :opacity :initform 1.0)
+   (scale-x :accessor scale-x :initarg :scale-x :initform 1.0)
+   (scale-y :accessor scale-y :initarg :scale-y :initform 1.0)
+   (origin-x :accessor origin-x :initarg :origin-x :initform 0.0)
+   (origin-y :accessor origin-y :initarg :origin-y :initform 0.0)
+   (wl-surface :accessor wl-surface :initarg :wl-surface :initform nil)
+   (effects :accessor effects :initarg :effects :initform nil)
+   (subsurfaces :accessor subsurfaces :initarg :subsurfaces :initform nil)))
 
 (defun remove-client (client-pointer)
   (let ((client (get-client client-pointer)))
@@ -99,8 +210,8 @@
 
 (defun find-region (->region client)
   (find-if (lambda (region)
-	     (and (pointerp (->region region))
-		  (pointer-eq (->region region) ->region)))
+	     (and (pointerp (->resource region))
+		  (pointer-eq (->resource region) ->region)))
 	   (regions client)))
 
 (defclass wl-surface ()
@@ -121,6 +232,30 @@
 (defun xdg-surface? (surface)
   (eql (class-of surface) (find-class 'xdg-surface)))
 
+(defmacro with-wl-array (array &body body)
+  `(let ((,array (foreign-alloc '(:struct wl_array))))
+     (wl-array-init ,array)
+     ,@body
+     (wl-array-release ,array)
+     (foreign-free ,array)))
+
+(defmethod activate ((surface (eql nil)) active-surface mods)
+  (when active-surface
+    (deactivate active-surface))
+  surface)
+
+(defmethod activate ((surface isurface) active-surface mods)
+  (when active-surface
+    (deactivate active-surface))
+  (keyboard-send-enter surface)
+  (keyboard-send-modifiers surface
+			   (first mods)
+			   (second mods)
+			   (third mods)
+			   (fourth mods))
+  surface)
+
+#|
 (defmethod activate ((surface xdg-surface) time)
   (let ((array (foreign-alloc '(:struct wl_array))))
     (wl-array-init array)
@@ -128,13 +263,22 @@
     (xdg-surface-send-configure (->xdg-surface surface) 0 0 array time)
     (wl-array-release array)
     (foreign-free array)))
+|#
 
+(defmethod deactivate ((surface (eql nil)))
+  )
+
+(defmethod deactivate ((surface isurface))
+  (keyboard-send-leave surface))
+
+#|
 (defmethod deactivate ((surface xdg-surface) time)
   (let ((array (foreign-alloc '(:struct wl_array))))
     (wl-array-init array)
     (xdg-surface-send-configure (->xdg-surface surface) 0 0 array time)
     (wl-array-release array)
     (foreign-free array)))
+|#
 
 (defmethod resize ((surface xdg-surface) width height time &key (activate? t))
   (let ((array (foreign-alloc '(:struct wl_array))))
@@ -160,22 +304,14 @@
 (defun zxdg-toplevel? (surface)
   (eql (class-of surface) (find-class 'zxdg-toplevel)))
 
-(defmethod activate ((surface zxdg-toplevel) time)
-  (let ((array (foreign-alloc '(:struct wl_array))))
-    (wl-array-init array)
-    (setf (mem-aref (wl-array-add array 4) :int32) 4)
-    (zxdg-toplevel-v6-send-configure (->zxdg-toplevel surface) 0 0 array)
-    (zxdg-surface-v6-send-configure (->zxdg-surface surface) 0)
-    (wl-array-release array)
-    (foreign-free array)))
-
+#|
 (defmethod deactivate ((surface zxdg-toplevel) time)
   (let ((array (foreign-alloc '(:struct wl_array))))
     (wl-array-init array)
-    (zxdg-toplevel-v6-send-configure (->zxdg-toplevel surface) 0 0 array)
-    (zxdg-surface-v6-send-configure (->zxdg-surface surface) 0)
+
     (wl-array-release array)
     (foreign-free array)))
+|#
 
 (defmethod resize ((surface zxdg-toplevel) width height time &key (activate? t))
   (let ((array (foreign-alloc '(:struct wl_array))))
@@ -224,18 +360,17 @@
 (defmethod accepts-pointer-events? ((surface (eql nil)))
   nil)
 
-(defmethod keyboard-send-enter ((surface wl-surface))
-  (when (and (client surface) (->keyboard (client surface)))
-    (let ((array (foreign-alloc '(:struct wl_array))))
+(defmethod keyboard-send-enter ((surface isurface))
+  (when (keyboard (client surface))
+    (with-wl-array array
       (wl-array-init array)
-      (when (->keyboard (client surface))
-	(wl-keyboard-send-enter (->keyboard (client surface)) 0 (->surface surface) array))
-      (wl-array-release array)
-      (foreign-free array))))
+      (wl-keyboard-send-enter (->resource (keyboard (client surface)))
+			      0
+			      (->resource (wl-surface surface)) array))))
 
-(defmethod keyboard-send-modifiers ((surface wl-surface) depressed latched locked group)
-  (when (and (client surface) (->keyboard (client surface)))
-    (wl-keyboard-send-modifiers (->keyboard (client surface))
+(defmethod keyboard-send-modifiers ((surface isurface) depressed latched locked group)
+  (when (and (client surface) (keyboard (client surface)))
+    (wl-keyboard-send-modifiers (->resource (keyboard (client surface)))
 				0
 				depressed
 				latched
@@ -243,9 +378,9 @@
 				group)))
   
 
-(defmethod keyboard-send-leave ((surface wl-surface))
-  (when (and (client surface) (->keyboard (client surface)))
-    (wl-keyboard-send-leave (->keyboard (client surface)) 0 (->surface surface))))
+(defmethod keyboard-send-leave ((surface isurface))
+  (when (and (client surface) (keyboard (client surface)))
+    (wl-keyboard-send-leave (->resource (keyboard (client surface))) 0 (->resource (wl-surface surface)))))
 
 #|
 (defmethod remove-surface ((surface wl-surface))
