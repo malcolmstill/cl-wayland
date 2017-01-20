@@ -16,6 +16,7 @@
    pointer
    ->resource
    find-resource
+   remove-resource
    get-version
    isurface
    wl-rect
@@ -94,10 +95,15 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (pointer :accessor pointer :initarg :pointer :initform nil)
    (keyboard :accessor keyboard :initarg :keyboard :initform nil)))
 
+(defmethod print-object ((obj wl-client) out)
+  (print-unreadable-object (obj out :type t)
+    (format out "@ ~X" (cffi:pointer-address (->client obj)))))
+
 (defun get-client (client-ptr)
   (let ((client (find-if (lambda (client)
 			   (cffi:pointer-eq (->client client) client-ptr))
 			 *clients*)))
+    ;;(format t "GET-CLIENT! Client found: ~A~%" client)
     (if client
 	client
 	(let ((new-client (make-instance 'wl-client :->client client-ptr)))
@@ -106,7 +112,10 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 
 (defclass wl-resource ()
   ((->resource :accessor ->resource :initarg :->resource :initform nil)
-   (client :accessor client :initarg :client :initform nil)))
+   (id :accessor id :initarg :id :initform nil)
+   (client :accessor client :initarg :client :initform nil)
+   (implementation :accessor implementation :initarg :implementation :initform nil)
+   (interface :accessor interface :initarg :interface :initform nil)))
 
 (defmethod get-version ((resource wl-resource))
   (wl-resource-get-version (->resource resource)))
@@ -136,6 +145,11 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 	     (cffi:pointer-eq (->resource resource) ->resource))
 	   (resources client)))
 
+(defun remove-resource (resource)
+  (with-slots (client) resource
+    (with-slots (resources) client
+      (setf resources (remove resource resources)))))
+
 (defun find-resource-all (->resource)
   (loop :for client :in *clients*
      :do (let ((r (find-resource client ->resource)))
@@ -149,31 +163,53 @@ Time for some macro fu. This will greatly simplify the plumbing code.
   (let ((impl (intern (concatenate 'string (string-upcase (symbol-name name)) "-IMPLEMENTATION")))
 	(iface (intern (concatenate 'string (string-upcase (symbol-name name)) "-INTERFACE")))
 	(impl-fn (intern (concatenate 'string "IMPLEMENT-" (string-upcase (symbol-name name)))))
+	(set-impl-fn (intern (concatenate 'string "SET-IMPLEMENTATION-" (string-upcase (symbol-name name)))))
 	(make-fn (intern (concatenate 'string "MAKE-" (string-upcase (symbol-name name))))))
     `(progn
        (defparameter ,impl nil)
        (defclass ,name (wl-resource ,@superclasses)
 	 (,@slots))
+       (defmethod print-object ((obj ,name) out)
+	 (print-unreadable-object (obj out :type t)
+	   (format out "impl:~X, iface:~X, ~s:~s @ ~X of ~s:~X" (cffi:pointer-address (implementation obj)) (cffi:pointer-address (interface obj))
+		   ;;(wl-resource-get-class (->resource obj))
+		   (id obj) (wl-resource-get-id (->resource obj)) (cffi:pointer-address (->resource obj)) (client obj) (cffi:pointer-address (wl-resource-get-client (->resource obj)))
+		   )))
+       (defun ,set-impl-fn ()
+	 (setf ,impl (,impl-fn
+			,@(apply #'concatenate 'list (mapcar (lambda (x)
+							       `(,(first x) (cffi:callback ,(second x))))
+							     impls)))))
        (defun ,make-fn (client version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)))
 	 (when (not ,impl)
 	   (setf ,impl (,impl-fn
 			,@(apply #'concatenate 'list (mapcar (lambda (x)
 							       `(,(first x) (cffi:callback ,(second x))))
-							     impls)))))
+							     impls))))
+	   (format t "MAKING IMPLEMENTATION OF ~s: ~X~%" ',impl (cffi:pointer-address ,impl)))
 	 (if supplied
-	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :resource resource :delete delete-fn)
+	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :data (->resource resource) :delete delete-fn)
 	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :delete delete-fn))))))
 
 (defmethod initialize-instance :before ((resource wl-resource) &key client version id implementation interface (data (cffi:null-pointer) supplied) delete)
   (let* ((->client (->client client))
-	 (->resource (wl-resource-create ->client interface version id)))
-    (setf (->resource resource) ->resource)
-    (wl-resource-set-implementation ->resource
+	 (resource-ptr (wl-resource-create ->client interface version id)))
+    (setf (->resource resource) resource-ptr)
+    (setf (id resource) id)
+    (setf (implementation resource) implementation)
+    (setf (interface resource) interface)
+    (wl-resource-set-implementation resource-ptr
 				    implementation
 				    (if supplied
 					data
-					->resource)
+					resource-ptr)
 				    delete)
+    #|
+    (format t "wl-resource-set-implemetation(~A, ~A, ~A, ~A)~%" ->resource implementation (if supplied
+											    data
+											    ->resource)
+	    delete)
+    |#
     (setf (client resource) client)
     (push resource (resources client))))
 
@@ -184,9 +220,11 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (height :accessor height :initarg :height :initform 0)
    (operation :accessor operation :initarg :operation :initform nil)))
 
+#|
 (defclass wl-region ()
   ((->region :accessor ->region :initarg :->region :initform nil)
    (rects :accessor rects :initarg :rects :initform nil)))
+|#
 
 (defclass isurface ()
   ((x :accessor x :initarg :x :initform 0.0)
@@ -202,11 +240,16 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (effects :accessor effects :initarg :effects :initform nil)
    (subsurfaces :accessor subsurfaces :initarg :subsurfaces :initform nil)))
 
+#|
 (defun remove-client (client-pointer)
   (let ((client (get-client client-pointer)))
+    (loop :for resource :in (resource client)
+       (r
+    (setf (resources client) nil)
     (setf *clients* (remove-if (lambda (client)
 				 (and (pointerp (waylisp:->client client)) (pointer-eq (waylisp:->client client) client-pointer)))
 			       *clients*))))
+|#
 
 (defun find-region (->region client)
   (find-if (lambda (region)
@@ -214,6 +257,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 		  (pointer-eq (->resource region) ->region)))
 	   (regions client)))
 
+#|
 (defclass wl-surface ()
   ((->surface :accessor ->surface :initarg :->surface :initform nil)
    (->buffer :accessor ->buffer :initarg :->buffer :initform nil)
@@ -225,12 +269,15 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (input-region :accessor input-region :initarg :input-region :initform nil)
    (opaque-region :accessor opaque-region :initarg :opaque-region :initform nil)
    (subsurfaces :accessor subsurfaces :initarg :subsurfaces :initform nil)))
+|#
 
+#|
 (defclass xdg-surface (wl-surface)
   ((->xdg-surface :accessor ->xdg-surface :initarg :->xdg-surface :initform nil)))
 
 (defun xdg-surface? (surface)
   (eql (class-of surface) (find-class 'xdg-surface)))
+|#
 
 (defmacro with-wl-array (array &body body)
   `(let ((,array (foreign-alloc '(:struct wl_array))))
@@ -280,6 +327,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     (foreign-free array)))
 |#
 
+#|
 (defmethod resize ((surface xdg-surface) width height time &key (activate? t))
   (let ((array (foreign-alloc '(:struct wl_array))))
     (wl-array-init array)
@@ -289,7 +337,9 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     (xdg-surface-send-configure (->xdg-surface surface) (round width) (round height) array time)
     (wl-array-release array)
     (foreign-free array)))
+|#
 
+#|
 (defclass xdg-popup (wl-surface)
   ((->xdg-popup :accessor ->xdg-popup :initarg :->xdg-popup :initform nil)))
 
@@ -303,6 +353,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 
 (defun zxdg-toplevel? (surface)
   (eql (class-of surface) (find-class 'zxdg-toplevel)))
+|#
 
 #|
 (defmethod deactivate ((surface zxdg-toplevel) time)
@@ -313,6 +364,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     (foreign-free array)))
 |#
 
+#|
 (defmethod resize ((surface zxdg-toplevel) width height time &key (activate? t))
   (let ((array (foreign-alloc '(:struct wl_array))))
     (wl-array-init array)
@@ -323,12 +375,15 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     (zxdg-surface-v6-send-configure (->zxdg-surface surface) 0)
     (wl-array-release array)
     (foreign-free array)))
+|#
 
 ;; WL-SUBSURFACE
 
+#|
 (defclass wl-subsurface (wl-surface)
   ((->subsurface :accessor ->subsurface :initarg :->subsurface :initform nil)
    (parent :accessor parent :initarg :parent :initform nil)))
+|#
 
 (defclass wl-cursor (wl-surface)
   ((hotspot-x :accessor hotspot-x :initarg :hotspot-x :initform nil)
@@ -342,17 +397,21 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (eql (class-of object) (find-class class)) ;; class
    (find (find-class class) (closer-mop:class-direct-superclasses (class-of object)))))
 
+#|
 (defmethod accepts-pointer-events? ((surface wl-surface))
   nil)
+|#
 
 ;(defmethod accepts-pointer-events? ((surface wl-shell))
 ;  (and (client surface) (->pointer (client surface))))
 
+#|
 (defmethod accepts-pointer-events? ((surface xdg-surface))
   (and (client surface) (->pointer (client surface))))
 
 (defmethod accepts-pointer-events? ((surface zxdg-surface))
   (and (client surface) (->pointer (client surface))))
+|#
 
 (defmethod accepts-pointer-events? ((surface wl-cursor))
   nil)
