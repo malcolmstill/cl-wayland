@@ -5,7 +5,7 @@
 (declaim (optimize (safety 0) (debug 0) (speed 3)))
 
 (defpackage :waylisp
-  (:use :common-lisp :cffi :wayland-server-core :wayland-server-protocol :xdg-shell-server-protocol :zxdg-shell-server-protocol)
+  (:use :common-lisp :cffi :wayland-server-core :wayland-server-protocol :xdg-shell-server-protocol :zxdg-shell-v6-server-protocol)
   (:export
    wl-resource
    with-wl-array
