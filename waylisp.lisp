@@ -201,8 +201,8 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 					     delete-fn))
 	   ,->resource))
        
-       (defun ,make-fn (client-ptr version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)) (implementation? t))
-	 (let ((,->resource (wl-resource-create client-ptr;;(->client client)
+       (defun ,make-fn (client version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)) (implementation? t))
+	 (let ((,->resource (wl-resource-create (->client client)
 						,iface
 						version
 						id)))
@@ -220,7 +220,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 					     delete-fn))
 	   (make-instance ',name
 			  :->resource ,->resource
-			  :client (get-client client-ptr)
+			  :client client
 			  :id id
 			  :version version
 			  :implementation ',impl
