@@ -128,7 +128,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 	 ,@body))))
 
 (defmacro def-wl-bind (name (client &rest args) &body body)
-  (let ((client-ptr (gensym "RESOURCE-PTR")))
+  (let ((client-ptr (gensym "CLIENT-PTR")))
     `(cffi:defcallback ,name :void ((,client-ptr :pointer) ,@args)
        (let* ((,client (get-client ,client-ptr)))
 	 ,@body))))
@@ -166,19 +166,23 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 	(make-fn (intern (concatenate 'string "MAKE-" (string-upcase (symbol-name name))))))
     `(progn
        (defparameter ,impl nil)
+       
        (defclass ,name (wl-resource ,@superclasses)
 	 (,@slots))
+       
        (defmethod print-object ((obj ,name) out)
 	 (print-unreadable-object (obj out :type t)
 	   (format out "impl:~X, iface:~X, ~s:~s @ ~X of ~s:~X" (cffi:pointer-address (implementation obj)) (cffi:pointer-address (interface obj))
 		   ;;(wl-resource-get-class (->resource obj))
 		   (id obj) (wl-resource-get-id (->resource obj)) (cffi:pointer-address (->resource obj)) (client obj) (cffi:pointer-address (wl-resource-get-client (->resource obj)))
 		   )))
+       
        (defun ,set-impl-fn ()
 	 (setf ,impl (,impl-fn
 			,@(apply #'concatenate 'list (mapcar (lambda (x)
 							       `(,(first x) (cffi:callback ,(second x))))
 							     impls)))))
+       
        (defun ,make-fn (client version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)) (implementation? t))
 	 (when (not ,impl)
 	   (setf ,impl (,impl-fn
@@ -186,8 +190,23 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 							       `(,(first x) (cffi:callback ,(second x))))
 							     impls)))))
 	 (if supplied
-	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :data (->resource resource) :delete delete-fn :implementation? implementation?)
-	     (make-instance ',name :client client :id id :version version :implementation ,impl :interface ,iface :delete delete-fn  :implementation? implementation?))))))
+	     (make-instance ',name
+			    :client client
+			    :id id
+			    :version version
+			    :implementation ,impl
+			    :interface ,iface
+			    :data (->resource resource)
+			    :delete delete-fn
+			    :implementation? implementation?)
+	     (make-instance ',name
+			    :client client
+			    :id id
+			    :version version
+			    :implementation ,impl
+			    :interface ,iface
+			    :delete delete-fn
+			    :implementation? implementation?))))))
 
 (defmethod initialize-instance :before ((resource wl-resource) &key client version id implementation interface (data (cffi:null-pointer) supplied) delete implementation?)
   (let* ((resource-ptr (wl-resource-create (->client client) interface version id)))
