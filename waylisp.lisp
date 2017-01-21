@@ -2,6 +2,8 @@
 ;; This is the beginning of a lispy layer on top
 ;; of the cffi-heavy cl-wayland
 
+(declaim (optimize (safety 0) (debug 0) (speed 3)))
+
 (defpackage :waylisp
   (:use :common-lisp :cffi :wayland-server-core :wayland-server-protocol :xdg-shell-server-protocol :zxdg-shell-server-protocol)
   (:export
@@ -116,7 +118,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (implementation :accessor implementation :initarg :implementation :initform nil)
    (interface :accessor interface :initarg :interface :initform nil)))
 
-(defmethod get-version ((resource wl-resource))
+(defun get-version (resource)
   (wl-resource-get-version (->resource resource)))
 
 (defmacro def-wl-callback (name (client resource &rest args) &body body)
@@ -159,11 +161,12 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     )
 
 (defmacro defimplementation (name (&rest superclasses) (&rest impls) (&rest slots))
-  (let ((impl (gensym (concatenate 'string (string-upcase (symbol-name name)) "-IMPLEMENTATION")))
+  (let ((impl (intern (concatenate 'string (string-upcase (symbol-name name)) "-IMPLEMENTATION")))
 	(iface (intern (concatenate 'string (string-upcase (symbol-name name)) "-INTERFACE")))
 	(impl-fn (intern (concatenate 'string "IMPLEMENT-" (string-upcase (symbol-name name)))))
 	(set-impl-fn (intern (concatenate 'string "SET-IMPLEMENTATION-" (string-upcase (symbol-name name)))))
 	(->resource (gensym "->RESOURCE"))
+	(bind-fn (intern (concatenate 'string "BIND-" (string-upcase (symbol-name name)))))
 	(make-fn (intern (concatenate 'string "MAKE-" (string-upcase (symbol-name name))))))
     `(progn
        (defparameter ,impl nil)
@@ -183,14 +186,9 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 			,@(apply #'concatenate 'list (mapcar (lambda (x)
 							       `(,(first x) (cffi:callback ,(second x))))
 							     impls)))))
-       
-       (defun ,make-fn (client version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)) (implementation? t))
-	 (when (not ,impl)
-	   (setf ,impl (,impl-fn
-			,@(apply #'concatenate 'list (mapcar (lambda (x)
-							       `(,(first x) (cffi:callback ,(second x))))
-							     impls)))))
-	 (let ((,->resource (wl-resource-create (->client client)
+
+       (defun ,bind-fn (client-ptr version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)) (implementation? t))
+	 (let ((,->resource (wl-resource-create client-ptr;;(->client client)
 						,iface
 						version
 						id)))
@@ -201,9 +199,28 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 						 (->resource resource)
 						 ,->resource)
 					     delete-fn))
+	   ,->resource))
+       
+       (defun ,make-fn (client-ptr version id &key (resource (cffi:null-pointer) supplied) (delete-fn (cffi:callback empty-delete-function)) (implementation? t))
+	 (let ((,->resource (wl-resource-create client-ptr;;(->client client)
+						,iface
+						version
+						id)))
+	   (when (not ,impl)
+	     (setf ,impl (,impl-fn
+			  ,@(apply #'concatenate 'list (mapcar (lambda (x)
+								 `(,(first x) (cffi:callback ,(second x))))
+							       impls)))))
+	   (when implementation?
+	     (wl-resource-set-implementation ,->resource
+					     ,impl
+					     (if supplied
+						 (->resource resource)
+						 ,->resource)
+					     delete-fn))
 	   (make-instance ',name
 			  :->resource ,->resource
-			  :client client
+			  :client (get-client client-ptr)
 			  :id id
 			  :version version
 			  :implementation ',impl
