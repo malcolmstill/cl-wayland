@@ -163,6 +163,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 	(iface (intern (concatenate 'string (string-upcase (symbol-name name)) "-INTERFACE")))
 	(impl-fn (intern (concatenate 'string "IMPLEMENT-" (string-upcase (symbol-name name)))))
 	(set-impl-fn (intern (concatenate 'string "SET-IMPLEMENTATION-" (string-upcase (symbol-name name)))))
+	(->resource (gensym "->RESOURCE"))
 	(make-fn (intern (concatenate 'string "MAKE-" (string-upcase (symbol-name name))))))
     `(progn
        (defparameter ,impl nil)
@@ -172,7 +173,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
        
        (defmethod print-object ((obj ,name) out)
 	 (print-unreadable-object (obj out :type t)
-	   (format out "impl:~X, iface:~X, ~s:~s @ ~X of ~s:~X" (cffi:pointer-address (implementation obj)) (cffi:pointer-address (interface obj))
+	   (format out "impl:~s, iface:~s, ~s:~s @ ~X of ~s:~X" (implementation obj) (interface obj)
 		   ;;(wl-resource-get-class (->resource obj))
 		   (id obj) (wl-resource-get-id (->resource obj)) (cffi:pointer-address (->resource obj)) (client obj) (cffi:pointer-address (wl-resource-get-client (->resource obj)))
 		   )))
@@ -189,40 +190,32 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 			,@(apply #'concatenate 'list (mapcar (lambda (x)
 							       `(,(first x) (cffi:callback ,(second x))))
 							     impls)))))
-	 (if supplied
-	     (make-instance ',name
-			    :client client
-			    :id id
-			    :version version
-			    :implementation ,impl
-			    :interface ,iface
-			    :data (->resource resource)
-			    :delete delete-fn
-			    :implementation? implementation?)
-	     (make-instance ',name
-			    :client client
-			    :id id
-			    :version version
-			    :implementation ,impl
-			    :interface ,iface
-			    :delete delete-fn
-			    :implementation? implementation?))))))
+	 (let ((,->resource (wl-resource-create (->client client)
+						,iface
+						version
+						id)))
+	   (when implementation?
+	     (wl-resource-set-implementation ,->resource
+					     ,impl
+					     (if supplied
+						 (->resource resource)
+						 ,->resource)
+					     delete-fn))
+	   (make-instance ',name
+			  :->resource ,->resource
+			  :client client
+			  :id id
+			  :version version
+			  :implementation ',impl
+			  :interface ',iface))))))
 
-(defmethod initialize-instance :before ((resource wl-resource) &key client version id implementation interface (data (cffi:null-pointer) supplied) delete implementation?)
-  (let* ((resource-ptr (wl-resource-create (->client client) interface version id)))
-    (setf (->resource resource) resource-ptr)
-    (setf (id resource) id)
-    (setf (interface resource) interface)
-    (when implementation?
-      (setf (implementation resource) implementation)
-      (wl-resource-set-implementation resource-ptr
-				      implementation
-				      (if supplied
-					  data
-					  resource-ptr)
-				      delete))
-    (setf (client resource) client)
-    (push resource (resources client))))
+(defmethod initialize-instance :before ((resource wl-resource) &key ->resource client version id implementation interface)
+  (setf (->resource resource) ->resource)
+  (setf (id resource) id)
+  (setf (interface resource) interface)
+  (setf (implementation resource) implementation)
+  (setf (client resource) client)
+  (push resource (resources client)))
 
 (defclass wl-rect ()
   ((x :accessor x :initarg :x :initform 0)
