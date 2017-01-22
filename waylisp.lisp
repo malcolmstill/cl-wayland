@@ -26,22 +26,9 @@
    wl-client
    get-client
    remove-client
-   wl-surface
-   wl-subsurface
-   wl-cursor
-   wl-cursor?
-   xdg-surface
-   xdg-surface?
-   zxdg-surface
-   zxdg-surface?
-   zxdg-toplevel
-   zxdg-toplevel?
-   zxdg-popup
-   zxdg-popup?
    activate
    deactivate
    resize
-   xdg-popup
    accepts-pointer-events?
    x
    y
@@ -68,15 +55,9 @@
    ->frame-callback
    input-region
    opaque-region
+   wl-surface
    subsurfaces
-   ->xdg-surface
-   ->xdg-toplevel
-   ->xdg-popup
-   ->zxdg-surface
-   ->zxdg-toplevel
    parent
-   hotspot-x
-   hotspot-y
    keyboard-send-leave
    keyboard-send-enter
    keyboard-send-modifiers))
@@ -391,48 +372,6 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     (wl-array-release array)
     (foreign-free array)))
 |#
-
-;; WL-SUBSURFACE
-
-#|
-(defclass wl-subsurface (wl-surface)
-  ((->subsurface :accessor ->subsurface :initarg :->subsurface :initform nil)
-   (parent :accessor parent :initarg :parent :initform nil)))
-|#
-
-(defclass wl-cursor (wl-surface)
-  ((hotspot-x :accessor hotspot-x :initarg :hotspot-x :initform nil)
-   (hotspot-y :accessor hotspot-y :initarg :hotspot-y :initform nil)))
-
-(defun wl-cursor? (surface)
-  (eql (class-of surface) (find-class 'wl-cursor)))
-
-(defun class-or-subclass-of (object class)
-  (or 
-   (eql (class-of object) (find-class class)) ;; class
-   (find (find-class class) (closer-mop:class-direct-superclasses (class-of object)))))
-
-#|
-(defmethod accepts-pointer-events? ((surface wl-surface))
-  nil)
-|#
-
-;(defmethod accepts-pointer-events? ((surface wl-shell))
-;  (and (client surface) (->pointer (client surface))))
-
-#|
-(defmethod accepts-pointer-events? ((surface xdg-surface))
-  (and (client surface) (->pointer (client surface))))
-
-(defmethod accepts-pointer-events? ((surface zxdg-surface))
-  (and (client surface) (->pointer (client surface))))
-|#
-
-(defmethod accepts-pointer-events? ((surface wl-cursor))
-  nil)
-
-(defmethod accepts-pointer-events? ((surface (eql nil)))
-  nil)
 
 (defmethod keyboard-send-enter ((surface isurface))
   (when (keyboard (client surface))
