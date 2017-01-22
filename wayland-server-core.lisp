@@ -67,6 +67,8 @@
    wl-resource-get-version
    wl-resource-instance-of
    wl-resource-get-id
+   wl-resource-get-client
+   wl-resource-get-class
    wl-shm-buffer-begin-access
    wl-shm-buffer-end-access
    wl-shm-buffer-get
@@ -375,6 +377,12 @@
   (not (zerop (%wl-resource-instance-of resource interface implementation))))
 
 (defcfun "wl_resource_get_id" :uint32
+  (resource :pointer))
+
+(defcfun "wl_resource_get_client" :pointer
+  (resource :pointer))
+
+(defcfun "wl_resource_get_class" :string
   (resource :pointer))
 
 ;; Shared memory (SHM) functions
