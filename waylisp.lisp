@@ -29,7 +29,6 @@
    activate
    deactivate
    resize
-   accepts-pointer-events?
    x
    y
    width
@@ -41,18 +40,11 @@
    effects
    opacity
    operation
-   ->region
    rects
    ->client
-   regions
    ->pointer
    ->keyboard
-   find-region
    client
-   ->surface
-   ->buffer
-   texture
-   ->frame-callback
    input-region
    opaque-region
    wl-surface
@@ -74,7 +66,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 (defclass wl-client ()
   ((->client :accessor ->client :initarg :->client :initform nil)
    (regions :accessor regions :initarg :regions :initform nil)
-   (resources :accessor resources :initargs :resources :initform nil)
+   (resources :accessor resources :initarg :resources :initform nil)
    (pointer :accessor pointer :initarg :pointer :initform nil)
    (keyboard :accessor keyboard :initarg :keyboard :initform nil)))
 
@@ -236,45 +228,11 @@ Time for some macro fu. This will greatly simplify the plumbing code.
    (effects :accessor effects :initarg :effects :initform nil)
    (subsurfaces :accessor subsurfaces :initarg :subsurfaces :initform nil)))
 
-#|
-(defun remove-client (client-pointer)
-  (let ((client (get-client client-pointer)))
-    (loop :for resource :in (resource client)
-       (r
-    (setf (resources client) nil)
-    (setf *clients* (remove-if (lambda (client)
-				 (and (pointerp (waylisp:->client client)) (pointer-eq (waylisp:->client client) client-pointer)))
-			       *clients*))))
-|#
-
 (defun find-region (->region client)
   (find-if (lambda (region)
 	     (and (pointerp (->resource region))
 		  (pointer-eq (->resource region) ->region)))
 	   (regions client)))
-
-#|
-(defclass wl-surface ()
-  ((->surface :accessor ->surface :initarg :->surface :initform nil)
-   (->buffer :accessor ->buffer :initarg :->buffer :initform nil)
-   (client :accessor client :initarg :client :initform nil)
-   (width :accessor width :initarg :width :initform 0)
-   (height :accessor height :initarg :height :initform 0)
-   (texture :accessor texture :initarg texture :initform nil)
-   (->frame-callback :accessor ->frame-callback :initarg :->frame-callback :initform nil)
-   (input-region :accessor input-region :initarg :input-region :initform nil)
-   (opaque-region :accessor opaque-region :initarg :opaque-region :initform nil)
-   (subsurfaces :accessor subsurfaces :initarg :subsurfaces :initform nil)))
-|#
-
-#|
-(defclass xdg-surface (wl-surface)
-  ((->xdg-surface :accessor ->xdg-surface :initarg :->xdg-surface :initform nil)))
-
-(defun xdg-surface? (surface)
-  (eql (class-of surface) (find-class 'xdg-surface)))
-|#
-
 (defmacro with-wl-array (array &body body)
   `(let ((,array (foreign-alloc '(:struct wl_array))))
      (wl-array-init ,array)
@@ -297,16 +255,6 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 			   (third mods)
 			   (fourth mods))
   surface)
-
-#|
-(defmethod activate ((surface xdg-surface) time)
-  (let ((array (foreign-alloc '(:struct wl_array))))
-    (wl-array-init array)
-    (setf (mem-aref (wl-array-add array 4) :int32) 4)
-    (xdg-surface-send-configure (->xdg-surface surface) 0 0 array time)
-    (wl-array-release array)
-    (foreign-free array)))
-|#
 
 (defmethod deactivate ((surface (eql nil)))
   )
@@ -394,14 +342,3 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 (defmethod keyboard-send-leave ((surface isurface))
   (when (and (client surface) (keyboard (client surface)))
     (wl-keyboard-send-leave (->resource (keyboard (client surface))) 0 (->resource (wl-surface surface)))))
-
-#|
-(defmethod remove-surface ((surface wl-surface))
-  ;; Compositor should implement this to
-  ;; decide what to do when a removing a surface
-  )
-
-;; REMOVE-SURFACE will always remove it from waylisp's list
-(defmethod remove-surface :after ((surface wl-surface))
-  (setf *surfaces* (remove surface *surfaces*)))
-|#
