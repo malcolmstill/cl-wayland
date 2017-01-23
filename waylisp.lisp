@@ -16,6 +16,7 @@
    resources
    keyboard
    pointer
+   id
    ->resource
    find-resource
    remove-resource
@@ -149,10 +150,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
        
        (defmethod print-object ((obj ,name) out)
 	 (print-unreadable-object (obj out :type t)
-	   (format out "impl:~s, iface:~s, ~s:~s @ ~X of ~s:~X" (implementation obj) (interface obj)
-		   ;;(wl-resource-get-class (->resource obj))
-		   (id obj) (wl-resource-get-id (->resource obj)) (cffi:pointer-address (->resource obj)) (client obj) (cffi:pointer-address (wl-resource-get-client (->resource obj)))
-		   )))
+	   (format out "~s@~X" (id obj) (cffi:pointer-address (->resource obj)))))
        
        (defun ,set-impl-fn ()
 	 (setf ,impl (,impl-fn
