@@ -231,6 +231,7 @@ Time for some macro fu. This will greatly simplify the plumbing code.
 	     (and (pointerp (->resource region))
 		  (pointer-eq (->resource region) ->region)))
 	   (regions client)))
+
 (defmacro with-wl-array (array &body body)
   `(let ((,array (foreign-alloc '(:struct wl_array))))
      (wl-array-init ,array)
@@ -305,6 +306,9 @@ Time for some macro fu. This will greatly simplify the plumbing code.
     (wl-array-release array)
     (foreign-free array)))
 |#
+
+(defmethod resize ((surface isurface) width height time &key (activate? t))
+  )
 
 #|
 (defmethod resize ((surface zxdg-toplevel) width height time &key (activate? t))
