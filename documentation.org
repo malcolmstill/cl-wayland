@@ -1,0 +1,139 @@
+* Wayland
+
+* Waylisp
+  
+  Waylisp is a light wrapper around some of the functionality provided by just wrapping libwayland.
+
+  It defines a number of helper classes. Every object in Wayland is a *wl-resource*. When the
+  objects are created by libwayland we get a pointer to the *wl-resource*. We define a Common Lisp
+  class *wl-resource* that wraps around this pointer, also storing the ID of the object, the client
+  to which it belongs and its interface and implementation.
+
+  For every type of Wayland resource we define a Common Lisp class. This is done through some magic
+  provided by the *defimplementation* macro. The macro let's us define the behaviour (i.e. the code
+  to run) when we get a callback from libwayland on paritcular events. It does a number of things at
+  compile time. Let's explore with an example; here's wl-surface:
+
+  #+BEGIN_SRC lisp
+
+    (defimplementation wl-surface (isurface ianimatable)
+      ((:commit commit)
+       (:attach attach)
+       (:frame frame)
+       (:set-input-region set-input-region)
+       (:set-opaque-region set-opaque-region)
+       (:destroy surface-destroy))
+      ((frame-callback :accessor frame-callback :initarg :frame-callback :initform nil)
+       (committed :accessor committed :initarg :committed :initform nil)
+       (input-region :accessor input-region :initarg :input-region :initform nil)
+       (opaque-region :accessor opaque-region :initarg :opaque-region :initform nil)
+       (texture :accessor texture :initarg :texture :initform nil)
+       (role :accessor role :initarg :role :initform nil)
+       (buffer :accessor buffer :initarg :buffer :initform nil)
+       (first-commit? :accessor first-commit? :initarg :first-commit? :initform t)))
+  #+END_SRC
+
+  This expands into the following code at compile time.
+
+  #+BEGIN_SRC lisp
+    (PROGN
+     (DEFPARAMETER WL-SURFACE-IMPLEMENTATION NIL)
+     (DEFCLASS WL-SURFACE (WL-RESOURCE ISURFACE IANIMATABLE)
+	       ((FRAME-CALLBACK :ACCESSOR FRAME-CALLBACK :INITARG :FRAME-CALLBACK
+				:INITFORM NIL)
+		(COMMITTED :ACCESSOR COMMITTED :INITARG :COMMITTED :INITFORM NIL)
+		(INPUT-REGION :ACCESSOR INPUT-REGION :INITARG :INPUT-REGION
+			      :INITFORM NIL)
+		(OPAQUE-REGION :ACCESSOR OPAQUE-REGION :INITARG :OPAQUE-REGION
+			       :INITFORM NIL)
+		(TEXTURE :ACCESSOR TEXTURE :INITARG :TEXTURE :INITFORM NIL)
+		(ROLE :ACCESSOR ROLE :INITARG :ROLE :INITFORM NIL)
+		(BUFFER :ACCESSOR BUFFER :INITARG :BUFFER :INITFORM NIL)
+		(FIRST-COMMIT? :ACCESSOR FIRST-COMMIT? :INITARG :FIRST-COMMIT?
+			       :INITFORM T)))
+     (DEFMETHOD PRINT-OBJECT ((WAYLISP::OBJ WL-SURFACE) WAYLISP::OUT)
+       (PRINT-UNREADABLE-OBJECT (WAYLISP::OBJ WAYLISP::OUT :TYPE T)
+	 (FORMAT WAYLISP::OUT "~s@~X" (ID WAYLISP::OBJ)
+		 (POINTER-ADDRESS (->RESOURCE WAYLISP::OBJ)))))
+     (DEFUN SET-IMPLEMENTATION-WL-SURFACE ()
+       (SETF WL-SURFACE-IMPLEMENTATION
+	       (IMPLEMENT-WL-SURFACE :COMMIT (CALLBACK COMMIT) :ATTACH
+				     (CALLBACK ATTACH) :FRAME (CALLBACK FRAME)
+				     :SET-INPUT-REGION (CALLBACK SET-INPUT-REGION)
+				     :SET-OPAQUE-REGION
+				     (CALLBACK SET-OPAQUE-REGION) :DESTROY
+				     (CALLBACK SURFACE-DESTROY))))
+     (DEFUN BIND-WL-SURFACE
+	    (WAYLISP::CLIENT-PTR WAYLISP::VERSION ID
+	     &KEY (WAYLISP::RESOURCE (NULL-POINTER) WAYLISP::SUPPLIED)
+	     (WAYLISP::DELETE-FN (CALLBACK WAYLISP::EMPTY-DELETE-FUNCTION))
+	     (WAYLISP::IMPLEMENTATION? T))
+       (LET ((#:->RESOURCE1119
+	      (WL-RESOURCE-CREATE WAYLISP::CLIENT-PTR WL-SURFACE-INTERFACE
+				  WAYLISP::VERSION ID)))
+	 (WHEN WAYLISP::IMPLEMENTATION?
+	   (WL-RESOURCE-SET-IMPLEMENTATION #:->RESOURCE1119
+					   WL-SURFACE-IMPLEMENTATION
+					   (IF WAYLISP::SUPPLIED
+					       (->RESOURCE WAYLISP::RESOURCE)
+					       #:->RESOURCE1119)
+					   WAYLISP::DELETE-FN))
+	 #:->RESOURCE1119))
+     (DEFUN MAKE-WL-SURFACE
+	    (CLIENT WAYLISP::VERSION ID
+	     &KEY (WAYLISP::RESOURCE (NULL-POINTER) WAYLISP::SUPPLIED)
+	     (WAYLISP::DELETE-FN (CALLBACK WAYLISP::EMPTY-DELETE-FUNCTION))
+	     (WAYLISP::IMPLEMENTATION? T))
+       (LET ((#:->RESOURCE1119
+	      (WL-RESOURCE-CREATE (->CLIENT CLIENT) WL-SURFACE-INTERFACE
+				  WAYLISP::VERSION ID)))
+	 (WHEN (NOT WL-SURFACE-IMPLEMENTATION)
+	   (SETF WL-SURFACE-IMPLEMENTATION
+		   (IMPLEMENT-WL-SURFACE :COMMIT (CALLBACK COMMIT) :ATTACH
+					 (CALLBACK ATTACH) :FRAME (CALLBACK FRAME)
+					 :SET-INPUT-REGION
+					 (CALLBACK SET-INPUT-REGION)
+					 :SET-OPAQUE-REGION
+					 (CALLBACK SET-OPAQUE-REGION) :DESTROY
+					 (CALLBACK SURFACE-DESTROY))))
+	 (WHEN WAYLISP::IMPLEMENTATION?
+	   (WL-RESOURCE-SET-IMPLEMENTATION #:->RESOURCE1119
+					   WL-SURFACE-IMPLEMENTATION
+					   (IF WAYLISP::SUPPLIED
+					       (->RESOURCE WAYLISP::RESOURCE)
+					       #:->RESOURCE1119)
+					   WAYLISP::DELETE-FN))
+	 (MAKE-INSTANCE 'WL-SURFACE :->RESOURCE #:->RESOURCE1119 :CLIENT CLIENT :ID
+			ID :VERSION WAYLISP::VERSION :IMPLEMENTATION
+			'WL-SURFACE-IMPLEMENTATION :INTERFACE
+			'WL-SURFACE-INTERFACE))))
+  #+END_SRC
+
+  The first thing we do is define a parameter *WL-SURFACE-IMPLEMENTATION*. This is nil at compile time.
+  A function *SET-IMPLEMENTATION-WL-SURFACE* is created by the macro that will be called when the compositor
+  starts up that will call the *IMPLEMENT-WL-SURFACE* function. *IMPLEMENT-WL-SURFACE* is generated from
+  the Wayland protocol XML files. To *IMPLEMENT-WL-SURFACE* we pass a number of CFFI callback functions that we define elsewhere (more on those later). These callbacks implement the Common Lisp code we want to run when we receive different events from libwayland. *IMPLEMENT-** functions allocate some memory with CFFI to hold a structure which is a set of callback function pointers (think C ABI).
+
+  Secondly we define our class *WL-SURFACE*, note again that this is a subclass of *WL-RESOURCE* and we also define some other superclasses (isurface and ianimatable...I'm starting to think that these belong back in ulubis).
+  
+  When the compositor runs we pass the libwayland display object a number of callbacks for operations to run when different types of objects are created. For example when ulubis start it runs, amongst other things:
+
+  #+BEGIN_SRC lisp
+
+    (wl-global-create (display *compositor*)
+		      wl-compositor-interface
+		      3
+		      (null-pointer)
+		      (callback compositor-bind))
+
+  #+END_SRC
+
+  This tells libwayland to call *compositor-bind* when it creates a new *wl-compositor*. *compositor* bind will create an instance of *wl-compositor* for example. It's implemetation in turn defines what to do when *wl-surfaces* are created, for example.
+
+(I was thinking this relates to the *BIND-WL-SURFACE* function but I'm not sure where these *BIND-** functions are actually used if anywhere (old code?). Commenting out the bind function generation...ulubis still works.)
+
+  Finally, the macro generates a *MAKE-WL-SURFACE* function that instantiates a *WL-SURFACE* object. Here we create our resource in libwayland, passing in the interface object. If we haven't set the *WL-SURFACE-IMPLEMENTATION* yet we create it here. We set the resource implementation and make an instance of our object, passing in the pointer to the resource in libwayland memory, the id, client, interface, implementation etc.
+
+** A note on interface objects
+   
+   For the standard wayland protocols the interface objects are baked into libwayland and exposed with symbol names. We can get the address in memory of the object from the dynamic loader symbol lookup. For things like xdg and zxdg, we have no such interface in libwayland. We have to create those interfaces ourselves. In cl-wayland we do that with *make-wl-interface*.
