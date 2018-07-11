@@ -134,6 +134,8 @@
 
   Finally, the macro generates a *MAKE-WL-SURFACE* function that instantiates a *WL-SURFACE* object. Here we create our resource in libwayland, passing in the interface object. If we haven't set the *WL-SURFACE-IMPLEMENTATION* yet we create it here. We set the resource implementation and make an instance of our object, passing in the pointer to the resource in libwayland memory, the id, client, interface, implementation etc.
 
+  In waylisp we define an *INITIALIZE-INSTANCE* *:BEFORE* method to run before any other *INITIALIZE-INSTANCE* on the object in question. This does a little bit of plumbing work so...I think the real reason is just to push the resource onto the resource list of the client object, and in the process we just set the other *WL-RESOURCE* fields here instead of leaving it to the the standard initializer (or is that using the *:BEFORE* method mean we have to do that ourselves?).
+  
 ** A note on interface objects
    
    For the standard wayland protocols the interface objects are baked into libwayland and exposed with symbol names. We can get the address in memory of the object from the dynamic loader symbol lookup. For things like xdg and zxdg, we have no such interface in libwayland. We have to create those interfaces ourselves. In cl-wayland we do that with *make-wl-interface*.
