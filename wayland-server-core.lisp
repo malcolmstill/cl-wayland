@@ -94,6 +94,8 @@
    wl_message-tclass
    wl_shell_interface
 
+   wl_signal
+   wl-signal-add
    ))
 
 
@@ -423,3 +425,12 @@
 (defcfun "wl_display_add_shm_format" :pointer
   (display :pointer)
   (format :uint32))
+
+(defcstruct wl_signal
+  (listener_list (:struct wl_list)))
+
+
+(defun wl-signal-add (sig listener)
+  (with-foreign-slots ((listener_list) sig (:struct wl_signal))
+    (wl-list-insert (getf listener_list 'prev)
+		    (foreign-slot-pointer listener '(:struct wl_listener) 'link))))
