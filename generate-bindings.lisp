@@ -42,8 +42,8 @@
   (with-open-file (s path)
     (xmls:parse s)))
 
-(defmacro of-type (x type)
-  `(and (listp ,x) (stringp (first ,x)) (string= (first ,x) ,type)))
+(defun of-type (x type)
+  (equal (xmls:node-name x) type))
 
 (defun requests-of (interface)
   (remove-if (lambda (x)
@@ -145,7 +145,7 @@
 	  (mapcar (lambda (entry)
 		    (when (of-type entry "arg")
 		      (read-arg entry)))
-		  roe-sxml)))
+		  (xmls:node-children roe-sxml))))
 
 (defun read-roe (roe-sxml)
   (let* ((name (name-of roe-sxml))
