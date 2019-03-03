@@ -16,3 +16,9 @@
 ```
 CL-USER> (ql:quickload :cl-wayland)
 ```
+
+## Contributors
+
+Thanks to:
+
+- [sdilts](https://github.com/sdilts)
