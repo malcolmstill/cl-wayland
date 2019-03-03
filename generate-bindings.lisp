@@ -16,6 +16,7 @@
   ((name :accessor name :initarg :name :initform nil)
    (version :accessor version :initarg :version :initform nil)
    (requests :accessor requests :initarg :requests :initform nil)
+   (enums :accessor enums :initarg :enums :initform nil)
    (events :accessor events :initarg :events :initform nil)))
 
 (defclass wl-arg ()
@@ -28,7 +29,17 @@
   ((name :accessor name :initarg :name :initform nil)
    (args :accessor args :initarg :args :initform nil)))
 
-;; Utility function
+(defclass wl-enum-entry()
+  ((name :accessor name :initarg :name :initform nil)
+   (value :accessor value :initarg :value :initform nil))
+  (:documentation "Used to record a value an enum can take"))
+
+(defclass wl-enum ()
+  ((name :accessor name :initarg :name :initform nil)
+   (entries :accessor entries :initarg :entries
+	   :initform nil :type wl-enum-entry)))
+
+;; Utility functiono
 
 (defparameter *generate-interfaces* nil)
 
@@ -39,11 +50,11 @@
 		   :initial-value nil)))
 
 (defun read-wayland-xml (path)
-  (with-open-file (s path)
+  (with-open-file (s path :if-does-not-exist :error)
     (xmls:parse s)))
 
-(defmacro of-type (x type)
-  `(and (listp ,x) (stringp (first ,x)) (string= (first ,x) ,type)))
+(defun of-type (x type)
+  (equal (xmls:node-name x) type))
 
 (defun requests-of (interface)
   (remove-if (lambda (x)
@@ -145,7 +156,7 @@
 	  (mapcar (lambda (entry)
 		    (when (of-type entry "arg")
 		      (read-arg entry)))
-		  roe-sxml)))
+		  (xmls:node-children roe-sxml))))
 
 (defun read-roe (roe-sxml)
   (let* ((name (name-of roe-sxml))
@@ -154,11 +165,28 @@
 			     :args (read-args roe-sxml))))
     roe))
 
-(defun read-roes (type interface-sxml)
+(defun read-enum (row-sxml interface-name)
+  (labels ((extract-value (value attr-list)
+	     (second (find value (xmls:node-attrs attr-list)
+			   :key (lambda (x) (car x))
+			   :test #'string=))))
+    (let* ((name (concatenate 'string interface-name "_" (name-of row-sxml)))
+	   (entries (remove nil
+			    (mapcar (lambda (x)
+			      (when (of-type x "entry")
+				(make-instance 'wl-enum-entry
+					       :name (extract-value "name" x)
+					       :value (extract-value "value" x))))
+			    (xmls:node-children row-sxml)))))
+      (make-instance 'wl-enum
+		     :name name
+		     :entries entries))))
+
+(defun read-roes (type interface-sxml function)
   (remove nil
 	  (mapcar (lambda (entry)
 		    (when (of-type entry type)
-		      (read-roe entry)))
+		      (funcall function entry)))
 		  interface-sxml)))
 
 (defun read-interface (interface-sxml)
@@ -168,8 +196,9 @@
 	 (interface (make-instance 'wl-interface
 				   :name interface-name
 				   :version interface-version)))
-    (setf (requests interface) (read-roes "request" interface-entries))
-    (setf (events interface) (read-roes "event" interface-entries))
+    (setf (requests interface) (read-roes "request" interface-entries #'read-roe))
+    (setf (events interface) (read-roes "event" interface-entries #'read-roe))
+    (setf (enums interface) (read-roes "enum" interface-entries (lambda (x) (read-enum x interface-name))))
     interface))
 
 (defun read-protocol (protocol-sxml)
@@ -226,7 +255,7 @@
 	,@(mapcar (lambda (roe)
 		    (generate-empty-callback name roe))
 		  roes)
-	
+
 	(defun ,implement-func (&key ,@implement-func-args)
 	  (let ((implementation (foreign-alloc '(:struct ,implement-name))))
 	    ,@(mapcar (lambda (roe)
@@ -236,6 +265,47 @@
 						       roe))
 		      roes)
 	    implementation))))))
+
+(defun bitfieldp (string)
+  (and (>= (length string) 2)
+	 (string= (subseq string 0 2) "0x")))
+
+(defun c-hex-to-lisp-hex (string)
+  (cond
+    ((bitfieldp string)
+      ;; concatenate so we are non-destructive
+     (concatenate 'string "#" (subseq string 1)))
+    ((null string) "")
+    (t string)))
+
+
+(defun contains-bitfield (entries)
+  (some (lambda (x)
+	  (bitfieldp (second x)))
+	entries))
+
+(defun generate-enums (interface rows)
+  (loop for enum in rows collect
+       (let ((name (lisp-name (name enum)))
+	     (fields (mapcar (lambda (entry)
+			       (list (intern (underscore-to-hyphen (name entry)) "KEYWORD")
+				     (value entry)))
+			     (entries enum))))
+	 ;; assume that if the first looks like a bit feild, the rest are too:
+	 (if (contains-bitfield fields)
+	     `(defbitfield ,name
+		,@(mapcar (lambda (x)
+			    ;; make sure the correct value is transfered over
+			    ;; there is no parse-hex, so read-from-string is (unwisely?) used
+			    (list (first x) (read-from-string (c-hex-to-lisp-hex (second x)))))
+			  fields))
+	     `(defcenum ,name
+		,@(mapcar (lambda (x)
+			    ;; make sure the correct value is transfered over
+			    (list (first x) (parse-integer (second x))))
+			  fields))))))
+
+
 
 (defun generate-arg (arg)
   (lisp-name (name arg)))
@@ -274,7 +344,8 @@
   (append
    (export-interface interface)
    (generate-implementation interface (requests interface))
-   (generate-rpes interface (events interface))))
+   (generate-rpes interface (events interface))
+   (generate-enums interface (enums interface))))
 
 (defun generate-client-side (interface)
   (append
@@ -356,17 +427,17 @@
 	(progn
 	  (setf *offset* 1)
 	  `((defparameter ,types-name nil)
-	    
+
 	    (defun ,name ()
 	      ,@(mapcar (lambda (interface)
 			  (generate-setf-interface generate-interfaces? interface))
 			interfaces)
-	      
+
 	      (setf ,types-name
 		    (make-wl-types
 		     (null-pointer)
 		     ,@(apply #'append (mapcar #'interfaces-of-interface interfaces))))
-	      
+
 	      ,@(apply #'append
 		       (mapcar (lambda (interface)
 				 (set-requests-and-events interface types-name))
@@ -376,7 +447,7 @@
 			(generate-setf-interface generate-interfaces? interface))
 			interfaces))))))
 
-;; 
+;;
 
 (defun preamble (package symbols path-to-lib dependencies)
   (let ((package-keyword (intern (concatenate 'string
@@ -386,9 +457,9 @@
 		    (:use :common-lisp :cffi :wayland-util :wayland-server-core ,@dependencies)
 		    (:export
 		     ,@symbols))
-		  
+
 		  (in-package ,package-keyword)
-		  
+
 		  ,@(when path-to-lib
 		      `(,(if (rest path-to-lib)
 			    `(define-foreign-library ,package
@@ -400,7 +471,7 @@
 			(use-foreign-library ,package)))))))
 
 ;; If we don't have a lib that exports the interface objects
-;; we have to build them 
+;; we have to build them
 
 (defun generate-bindings (client? package xml-file &key (path-to-lib nil) (generate-interfaces? nil) (dependencies nil))
   (setf *generate-interfaces* generate-interfaces?)
